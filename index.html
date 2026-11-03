@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRAYATE – Intelligent Mine Safety & Rescue System</title>
+  <meta name="description" content="AI-powered mine safety and rescue rover platform. Advanced autonomous sub-surface sensing, environmental threat detection, and remote operations.">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338BDF8' stroke-width='2'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polyline points='2 17 12 22 22 17'/><polyline points='2 12 12 17 22 12'/></svg>">
+
+  <!-- Google Fonts: Space Grotesk (Headings), Inter (Body), JetBrains Mono (Technical/Telemetry) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#080D14',
+              secondary: '#0D1520',
+              card: '#111B27',
+              border: '#243244',
+              'border-subtle': '#182332',
+              accent: '#38BDF8',
+              'accent-hover': '#0EA5E9',
+              primaryText: '#F8FAFC',
+              secondaryText: '#94A3B8',
+              success: '#22C55E',
+              warning: '#F59E0B',
+              danger: '#EF4444'
+            }
+          },
+          fontFamily: {
+            heading: ['Space Grotesk', 'sans-serif'],
+            body: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'ping-slow': 'ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Technical Grid Pattern */
+    .bg-tech-grid {
+      background-size: 40px 40px;
+      background-image: 
+        linear-gradient(to right, rgba(36, 50, 68, 0.25) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(36, 50, 68, 0.25) 1px, transparent 1px);
+    }
+    
+    .bg-tech-dots {
+      background-image: radial-gradient(rgba(56, 189, 248, 0.12) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* Restrained Cyan Glow */
+    .cyan-glow {
+      box-shadow: 0 0 25px -4px rgba(56, 189, 248, 0.22);
+    }
+
+    .cyan-glow-subtle {
+      box-shadow: 0 0 15px -2px rgba(56, 189, 248, 0.12);
+    }
+
+    /* Card Glow on Hover */
+    .hover-card-glow {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .hover-card-glow:hover {
+      border-color: rgba(56, 189, 248, 0.45);
+      box-shadow: 0 0 24px -2px rgba(14, 165, 233, 0.15);
+      transform: translateY(-2px);
+    }
+
+    /* Scanline effect for video/HUD */
+    .scanlines {
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.03),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.03)
+      );
+      background-size: 100% 4px, 6px 100%;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080D14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #243244;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #38BDF8;
+    }
+  </style>
+</head>
+<body class="bg-brand-bg text-brand-primaryText font-body antialiased selection:bg-brand-accent selection:text-brand-bg relative overflow-x-hidden">
+
+  <!-- ========================================================================= -->
+  <!-- 3. NAVIGATION BAR (Sticky, subtle transparent dark background)            -->
+  <!-- ========================================================================= -->
+  <header class="sticky top-0 z-50 w-full bg-[#080D14]/85 backdrop-blur-md border-b border-brand-border">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Left: Logo & Brand Name -->
+      <a href="#" class="flex items-center gap-3 group">
+        <div class="relative w-9 h-9 rounded bg-brand-secondary border border-brand-border flex items-center justify-center transition-all duration-300 group-hover:border-brand-accent group-hover:shadow-[0_0_12px_rgba(56,189,248,0.3)]">
+          <!-- Geometric Abstract Symbol -->
+          <svg class="w-5 h-5 text-brand-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-brand-accent animate-ping-slow"></span>
+        </div>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5">
+            <span class="font-heading text-xl font-bold tracking-wider text-brand-primaryText">TRAYATE</span>
+            <span class="inline-block px-1.5 py-0.2 text-[9px] font-mono tracking-widest uppercase bg-brand-secondary border border-brand-border text-brand-accent rounded">SaaS</span>
+          </div>
+          <span class="font-mono text-[9px] text-brand-secondaryText tracking-widest uppercase -mt-0.5">ROBOTIC MINE DEFENSE</span>
+        </div>
+      </a>
+
+      <!-- Center: Navigation Links -->
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-brand-secondaryText">
+        <a href="#home" class="text-brand-primaryText hover:text-brand-accent transition-colors duration-200">Home</a>
+        <a href="#technology" class="hover:text-brand-primaryText transition-colors duration-200">Technology</a>
+        <a href="#t-rover" class="hover:text-brand-primaryText transition-colors duration-200">T-Rover</a>
+        <a href="#capabilities" class="hover:text-brand-primaryText transition-colors duration-200">Capabilities</a>
+        <a href="#about" class="hover:text-brand-primaryText transition-colors duration-200">About</a>
+      </nav>
+
+      <!-- Right: Action Button & Mobile Toggle -->
+      <div class="flex items-center gap-3">
+        <button onclick="openCommandModal()" class="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded bg-brand-card hover:bg-brand-secondary text-brand-primaryText border border-brand-border hover:border-brand-accent transition-all duration-200 cyan-glow-subtle group">
+          <span>Launch Command Centre</span>
+          <i data-lucide="arrow-up-right" class="w-4 h-4 text-brand-accent group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"></i>
+        </button>
+
+        <!-- Mobile Menu Button -->
+        <button id="mobileMenuBtn" class="md:hidden p-2 rounded bg-brand-secondary border border-brand-border text-brand-secondaryText hover:text-brand-primaryText" aria-label="Toggle Menu">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Mobile Drawer Menu -->
+    <div id="mobileMenu" class="hidden md:hidden border-b border-brand-border bg-brand-secondary/95 backdrop-blur-lg px-6 py-4 space-y-3 font-medium text-sm text-brand-secondaryText">
+      <a href="#home" class="block py-1 hover:text-brand-accent">Home</a>
+      <a href="#technology" class="block py-1 hover:text-brand-accent">Technology</a>
+      <a href="#t-rover" class="block py-1 hover:text-brand-accent">T-Rover</a>
+      <a href="#capabilities" class="block py-1 hover:text-brand-accent">Capabilities</a>
+      <a href="#about" class="block py-1 hover:text-brand-accent">About</a>
+      <button onclick="openCommandModal()" class="w-full mt-2 py-2.5 text-center text-xs font-semibold rounded bg-brand-accent text-brand-bg uppercase tracking-wider">
+        Launch Command Centre ↗
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 4. HERO SECTION (Full-screen, Impressive, 3D Industrial Render Focal Point)-->
+  <!-- ========================================================================= -->
+  <section id="home" class="relative min-h-[calc(100vh-5rem)] flex items-center justify-center pt-8 pb-16 lg:py-20 bg-tech-grid overflow-hidden">
+    
+    <!-- Restrained Ambient Cyan Glow Field -->
+    <div class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[350px] bg-brand-accent/8 rounded-full blur-[140px] pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+        
+        <!-- Left: Headline, Description & CTAs -->
+        <div class="lg:col-span-6 space-y-6 text-left">
+          
+          <!-- Small Eyebrow Label -->
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-secondary/90 border border-brand-border">
+            <span class="w-2 h-2 rounded-full bg-brand-accent animate-pulse shadow-[0_0_8px_#38BDF8]"></span>
+            <span class="font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase">NEXT-GENERATION MINE SAFETY TECHNOLOGY</span>
+          </div>
+
+          <!-- Main Headline with subtle cyan gradient -->
+          <h1 class="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-brand-primaryText leading-[1.1]">
+            Into the depths.<br>
+            <span class="bg-gradient-to-r from-brand-accent via-[#38BDF8] to-[#93C5FD] bg-clip-text text-transparent">
+              Beyond human limits.
+            </span>
+          </h1>
+
+          <!-- Description -->
+          <p class="text-base sm:text-lg text-brand-secondaryText max-w-xl leading-relaxed">
+            An intelligent mine safety and rescue rover designed to monitor hazardous environments, detect critical threats and support rescue operations where human access becomes dangerous.
+          </p>
+
+          <!-- CTA Buttons -->
+          <div class="flex flex-wrap items-center gap-4 pt-2">
+            <a href="#t-rover" class="inline-flex items-center gap-2 px-6 py-3.5 rounded font-semibold text-sm bg-brand-accent hover:bg-brand-accent-hover text-brand-bg transition-all duration-200 cyan-glow active:scale-[0.98]">
+              <span>Explore T-Rover</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+
+            <button onclick="openCommandModal()" class="inline-flex items-center gap-2 px-6 py-3.5 rounded font-semibold text-sm bg-brand-card hover:bg-brand-secondary text-brand-primaryText border border-brand-border hover:border-brand-accent transition-all duration-200 active:scale-[0.98]">
+              <span>Launch Command Centre</span>
+              <i data-lucide="arrow-up-right" class="w-4 h-4 text-brand-accent"></i>
+            </button>
+          </div>
+
+          <!-- Micro-information below buttons -->
+          <div class="pt-4 border-t border-brand-border/60 flex flex-wrap items-center gap-y-2 gap-x-4 font-mono text-[11px] text-brand-secondaryText">
+            <span class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-accent"></span>
+              REAL-TIME MONITORING
+            </span>
+            <span class="text-brand-border">•</span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-accent"></span>
+              INTELLIGENT DETECTION
+            </span>
+            <span class="text-brand-border">•</span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-accent"></span>
+              REMOTE OPERATIONS
+            </span>
+          </div>
+
+        </div>
+
+        <!-- Right: 3D-Style Industrial Render of Six-Wheeled Rover -->
+        <div class="lg:col-span-6 relative">
+          
+          <!-- Outer Engineered HUD Frame with Reticles -->
+          <div class="relative rounded-lg bg-brand-card/90 border border-brand-border p-2 sm:p-3 shadow-2xl overflow-hidden hover-card-glow group">
+            
+            <!-- Corner Reticle Brackets -->
+            <div class="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-brand-accent z-20"></div>
+            <div class="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-brand-accent z-20"></div>
+            <div class="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-brand-accent z-20"></div>
+            <div class="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-brand-accent z-20"></div>
+
+            <!-- Top Telemetry Banner -->
+            <div class="flex items-center justify-between px-3 py-1.5 mb-2 bg-brand-secondary/90 border border-brand-border/60 rounded text-[11px] font-mono text-brand-secondaryText">
+              <div class="flex items-center gap-2">
+                <span class="text-brand-accent font-semibold">UNIT // T-ROVER 01</span>
+                <span class="text-brand-border">|</span>
+                <span class="hidden sm:inline">6-WHEEL DRIVE ACTIVE</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-brand-success animate-pulse"></span>
+                <span class="text-brand-success font-medium">SYSTEM READY</span>
+              </div>
+            </div>
+
+            <!-- Image Container with Realistic 3D Render -->
+            <div class="relative aspect-[16/10] sm:aspect-[16/9] w-full overflow-hidden rounded border border-brand-border bg-[#05080E]">
+              
+              <img 
+                src="assets/t-rover.png" 
+                alt="T-Rover: AI-Powered Six-Wheeled Industrial Mine Rescue Rover Prototype" 
+                class="w-full h-full object-cover object-center filter contrast-105 group-hover:scale-[1.02] transition-transform duration-700 ease-out"
+                loading="eager"
+              >
+
+              <!-- Vignette Gradient -->
+              <div class="absolute inset-0 bg-gradient-to-t from-brand-bg/80 via-transparent to-brand-bg/20 pointer-events-none"></div>
+
+              <!-- Live HUD Telemetry Badge Overlay (Top Right) -->
+              <div class="absolute top-3 right-3 bg-brand-bg/85 backdrop-blur-md border border-brand-border px-3 py-1.5 rounded text-[10px] font-mono space-y-0.5 pointer-events-none shadow-lg">
+                <div class="flex justify-between gap-3 text-brand-secondaryText">
+                  <span>TELEMETRY:</span>
+                  <span class="text-brand-accent font-semibold">NOMINAL</span>
+                </div>
+                <div class="flex justify-between gap-3 text-brand-secondaryText">
+                  <span>SUBSURFACE:</span>
+                  <span class="text-brand-primaryText font-semibold">-420.5 M</span>
+                </div>
+              </div>
+
+              <!-- Live Sensor Targeting Reticle Overlay (Bottom Left) -->
+              <div class="absolute bottom-3 left-3 bg-brand-bg/85 backdrop-blur-md border border-brand-accent/40 px-3 py-2 rounded text-[10px] font-mono pointer-events-none cyan-glow-subtle">
+                <div class="flex items-center gap-2 text-brand-accent font-bold">
+                  <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                  <span>LIDAR + GAS SCANNER ARMED</span>
+                </div>
+                <div class="text-[9px] text-brand-secondaryText mt-0.5">ESP32 MULTI-BUS // LATENCY: 12ms</div>
+              </div>
+
+            </div>
+
+            <!-- Bottom Frame Status Details -->
+            <div class="mt-2 px-3 py-1.5 bg-brand-secondary/90 border border-brand-border/60 rounded flex items-center justify-between font-mono text-[10px] text-brand-secondaryText">
+              <span>CHASSIS: INDUSTRIAL GRADE TITANIUM-ALLOY</span>
+              <span class="text-brand-accent">ATEX / IECEx COMPLIANT</span>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 5. LIVE SYSTEM STATUS STRIP (Horizontal Status Strip)                      -->
+  <!-- ========================================================================= -->
+  <section class="w-full bg-brand-secondary border-y border-brand-border py-4 relative z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 font-mono text-xs">
+        
+        <!-- 4 Compact Status Indicators -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
+          
+          <!-- Indicator 1: Rover Connectivity -->
+          <div class="flex items-center gap-2.5">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-success opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-success"></span>
+            </span>
+            <div class="flex flex-col">
+              <span class="text-brand-secondaryText text-[10px]">Rover Connectivity</span>
+              <span class="font-bold text-brand-success tracking-wider">ONLINE</span>
+            </div>
+          </div>
+
+          <!-- Indicator 2: Sensor Network -->
+          <div class="flex items-center gap-2.5">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="inline-flex rounded-full h-2.5 w-2.5 bg-brand-accent shadow-[0_0_8px_#38BDF8]"></span>
+            </span>
+            <div class="flex flex-col">
+              <span class="text-brand-secondaryText text-[10px]">Sensor Network</span>
+              <span class="font-bold text-brand-accent tracking-wider">ACTIVE</span>
+            </div>
+          </div>
+
+          <!-- Indicator 3: Environmental Monitoring -->
+          <div class="flex items-center gap-2.5">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="inline-flex rounded-full h-2.5 w-2.5 bg-brand-success"></span>
+            </span>
+            <div class="flex flex-col">
+              <span class="text-brand-secondaryText text-[10px]">Env. Monitoring</span>
+              <span class="font-bold text-brand-success tracking-wider">LIVE</span>
+            </div>
+          </div>
+
+          <!-- Indicator 4: DustCleaner -->
+          <div class="flex items-center gap-2.5">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="inline-flex rounded-full h-2.5 w-2.5 bg-brand-warning"></span>
+            </span>
+            <div class="flex flex-col">
+              <span class="text-brand-secondaryText text-[10px]">DustCleaner</span>
+              <span class="font-bold text-brand-warning tracking-wider">STANDBY</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Protocol & Supabase Live Data Sync Flag -->
+        <div class="flex items-center justify-between sm:justify-end gap-3 text-[11px] text-brand-secondaryText pt-2 lg:pt-0 border-t lg:border-t-0 border-brand-border/60">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="database" class="w-3.5 h-3.5 text-brand-accent"></i>
+            <span>SUPABASE READY</span>
+          </span>
+          <span class="text-brand-border">|</span>
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="radio" class="w-3.5 h-3.5 text-brand-accent"></i>
+            <span>MQTT 100Hz</span>
+          </span>
+          <span class="text-brand-border">|</span>
+          <span class="text-brand-accent font-semibold">12ms LATENCY</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 6. TECHNOLOGY / CAPABILITIES SECTION (4 Premium Feature Cards)            -->
+  <!-- ========================================================================= -->
+  <section id="technology" class="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative scroll-mt-20">
+    <div id="capabilities" class="absolute -top-20"></div>
+    
+    <!-- Section Header -->
+    <div class="text-left mb-16 space-y-3">
+      <div class="inline-flex items-center gap-2 font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase">
+        <i data-lucide="shield-check" class="w-4 h-4"></i>
+        <span>ENGINEERED FOR HAZARDOUS ENVIRONMENTS</span>
+      </div>
+      <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-brand-primaryText tracking-tight">
+        Multiple layers of intelligence. One mission.
+      </h2>
+      <p class="text-brand-secondaryText text-base sm:text-lg max-w-2xl">
+        Built with hardware-level redundancy and edge-computed machine intelligence to maintain operational integrity in explosive and zero-visibility mine shafts.
+      </p>
+    </div>
+
+    <!-- 4 Premium Feature Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      
+      <!-- CARD 1 — Environmental Intelligence -->
+      <div class="bg-brand-card border border-brand-border rounded-lg p-6 flex flex-col justify-between hover-card-glow group">
+        <div>
+          <div class="w-12 h-12 rounded bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent mb-6 group-hover:border-brand-accent transition-colors">
+            <i data-lucide="wind" class="w-6 h-6"></i>
+          </div>
+          <div class="font-mono text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
+            01 // ATMOSPHERIC SENSING
+          </div>
+          <h3 class="font-heading text-xl font-bold text-brand-primaryText mb-3 group-hover:text-brand-accent transition-colors">
+            Environmental Intelligence
+          </h3>
+          <p class="text-sm text-brand-secondaryText leading-relaxed">
+            Continuous monitoring of hazardous gases, temperature, humidity and environmental conditions with calibrated sub-ppm precision.
+          </p>
+        </div>
+
+        <!-- Micro Metric / Indicator -->
+        <div class="mt-6 pt-4 border-t border-brand-border/60 font-mono text-xs flex justify-between items-center">
+          <span class="text-brand-secondaryText">CH4 / CO / O2 / H2S</span>
+          <span class="text-brand-accent">100Hz Refresh</span>
+        </div>
+      </div>
+
+      <!-- CARD 2 — AI-Powered Vision -->
+      <div class="bg-brand-card border border-brand-border rounded-lg p-6 flex flex-col justify-between hover-card-glow group">
+        <div>
+          <div class="w-12 h-12 rounded bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent mb-6 group-hover:border-brand-accent transition-colors">
+            <i data-lucide="scan" class="w-6 h-6"></i>
+          </div>
+          <div class="font-mono text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
+            02 // COMPUTER VISION
+          </div>
+          <h3 class="font-heading text-xl font-bold text-brand-primaryText mb-3 group-hover:text-brand-accent transition-colors">
+            AI-Powered Vision
+          </h3>
+          <p class="text-sm text-brand-secondaryText leading-relaxed">
+            Intelligent visual monitoring with human, smoke and fire detection capabilities powered by on-chassis edge neural inference.
+          </p>
+        </div>
+
+        <!-- Micro Metric / Indicator -->
+        <div class="mt-6 pt-4 border-t border-brand-border/60 font-mono text-xs flex justify-between items-center">
+          <span class="text-brand-secondaryText">Edge YOLO Model</span>
+          <span class="text-brand-success font-semibold">98.4% Accuracy</span>
+        </div>
+      </div>
+
+      <!-- CARD 3 — Smart Dust Mitigation -->
+      <div class="bg-brand-card border border-brand-border rounded-lg p-6 flex flex-col justify-between hover-card-glow group">
+        <div>
+          <div class="w-12 h-12 rounded bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent mb-6 group-hover:border-brand-accent transition-colors">
+            <i data-lucide="filter" class="w-6 h-6"></i>
+          </div>
+          <div class="font-mono text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
+            03 // ACTIVE FILTRATION
+          </div>
+          <h3 class="font-heading text-xl font-bold text-brand-primaryText mb-3 group-hover:text-brand-accent transition-colors">
+            Smart Dust Mitigation
+          </h3>
+          <p class="text-sm text-brand-secondaryText leading-relaxed">
+            Integrated DustCleaner system designed to capture airborne coal dust using an automated filtration mechanism, preventing combustion risks.
+          </p>
+        </div>
+
+        <!-- Micro Metric / Indicator -->
+        <div class="mt-6 pt-4 border-t border-brand-border/60 font-mono text-xs flex justify-between items-center">
+          <span class="text-brand-secondaryText">Particulate Trap</span>
+          <span class="text-brand-warning font-semibold">HEPA Auto-Purge</span>
+        </div>
+      </div>
+
+      <!-- CARD 4 — Remote Operations -->
+      <div class="bg-brand-card border border-brand-border rounded-lg p-6 flex flex-col justify-between hover-card-glow group">
+        <div>
+          <div class="w-12 h-12 rounded bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent mb-6 group-hover:border-brand-accent transition-colors">
+            <i data-lucide="activity" class="w-6 h-6"></i>
+          </div>
+          <div class="font-mono text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
+            04 // UNIFIED COMMAND
+          </div>
+          <h3 class="font-heading text-xl font-bold text-brand-primaryText mb-3 group-hover:text-brand-accent transition-colors">
+            Remote Operations
+          </h3>
+          <p class="text-sm text-brand-secondaryText leading-relaxed">
+            Monitor rover telemetry, receive alerts and operate the rover remotely through a unified command interface with redundant failover links.
+          </p>
+        </div>
+
+        <!-- Micro Metric / Indicator -->
+        <div class="mt-6 pt-4 border-t border-brand-border/60 font-mono text-xs flex justify-between items-center">
+          <span class="text-brand-secondaryText">Control Latency</span>
+          <span class="text-brand-accent font-semibold">&lt; 14ms (Sub-1GHz)</span>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 7. MEET T-ROVER SECTION (Wide Product Showcase Section)                    -->
+  <!-- ========================================================================= -->
+  <section id="t-rover" class="py-24 bg-brand-secondary border-y border-brand-border relative overflow-hidden">
+    
+    <!-- Background Technical Accent -->
+    <div class="absolute inset-0 bg-tech-dots opacity-40 pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      
+      <!-- Headline & Description -->
+      <div class="max-w-3xl mb-16 space-y-3">
+        <div class="font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase">
+          ROBOTIC PLATFORM ARCHITECTURE
+        </div>
+        <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-brand-primaryText tracking-tight">
+          Meet T-Rover.
+        </h2>
+        <p class="text-brand-secondaryText text-base sm:text-lg">
+          An integrated robotic platform designed to extend situational awareness into hazardous underground environments.
+        </p>
+      </div>
+
+      <!-- Product Showcase Layout: Visual + Technical Highlights -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        
+        <!-- Large Rover Visual with Interactive Component Callouts -->
+        <div class="lg:col-span-7 relative">
+          <div class="rounded-lg bg-brand-card border border-brand-border p-3 sm:p-4 shadow-2xl relative overflow-hidden">
+            
+            <div class="relative rounded overflow-hidden aspect-[16/10] bg-[#05080E] border border-brand-border">
+              <img 
+                src="assets/t-rover.png" 
+                alt="T-Rover Industrial Mine Rescue Rover" 
+                class="w-full h-full object-cover object-center"
+              >
+
+              <!-- Subtle Overlay Grid & Scanline -->
+              <div class="absolute inset-0 bg-gradient-to-t from-brand-bg/70 via-transparent to-transparent pointer-events-none"></div>
+
+              <!-- Hotspot 1: Optical & LIDAR Turret -->
+              <div class="absolute top-[22%] left-[45%] group cursor-pointer">
+                <span class="flex h-3 w-3 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-accent"></span>
+                </span>
+                <div class="hidden group-hover:block absolute left-4 -top-2 bg-brand-bg/95 border border-brand-accent text-brand-primaryText px-2.5 py-1 rounded text-[10px] font-mono whitespace-nowrap z-30 shadow-lg">
+                  360° LIDAR & Optical Turret
+                </div>
+              </div>
+
+              <!-- Hotspot 2: Gas Array Intake -->
+              <div class="absolute top-[48%] left-[72%] group cursor-pointer">
+                <span class="flex h-3 w-3 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-accent"></span>
+                </span>
+                <div class="hidden group-hover:block absolute right-4 -top-2 bg-brand-bg/95 border border-brand-accent text-brand-primaryText px-2.5 py-1 rounded text-[10px] font-mono whitespace-nowrap z-30 shadow-lg">
+                  Multi-Gas Sniffer Intake
+                </div>
+              </div>
+
+              <!-- Hotspot 3: 6WD Chassis Suspension -->
+              <div class="absolute bottom-[20%] left-[28%] group cursor-pointer">
+                <span class="flex h-3 w-3 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-accent"></span>
+                </span>
+                <div class="hidden group-hover:block absolute left-4 -top-2 bg-brand-bg/95 border border-brand-accent text-brand-primaryText px-2.5 py-1 rounded text-[10px] font-mono whitespace-nowrap z-30 shadow-lg">
+                  6-Wheel High-Torque Hub Drive
+                </div>
+              </div>
+
+              <!-- Hotspot 4: DustCleaner Exhaust -->
+              <div class="absolute bottom-[28%] right-[22%] group cursor-pointer">
+                <span class="flex h-3 w-3 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-warning opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-warning"></span>
+                </span>
+                <div class="hidden group-hover:block absolute right-4 -top-2 bg-brand-bg/95 border border-brand-warning text-brand-primaryText px-2.5 py-1 rounded text-[10px] font-mono whitespace-nowrap z-30 shadow-lg">
+                  Integrated DustCleaner Core
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Visual Footer Specs -->
+            <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-brand-secondaryText px-1">
+              <span>WEIGHT: 28.5 KG</span>
+              <span>RUN TIME: 6.5 HRS CONT.</span>
+              <span class="text-brand-accent">IP67 WATER / DUST TIGHT</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Technical Highlights Grid (Side List) -->
+        <div class="lg:col-span-5 space-y-4">
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3.5">
+            
+            <!-- Highlight 1 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">6-Wheel Industrial Mobility</h4>
+                <span class="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">350mm Clearance</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Independent articulation suspension engineered for rough mine rubble, flooded shafts, and 45° inclines.
+              </p>
+            </div>
+
+            <!-- Highlight 2 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">Multi-Sensor Integration</h4>
+                <span class="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">6-Gas + Thermal</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Simultaneous detection of methane, carbon monoxide, oxygen depletion, humidity, ambient heat, and barometer.
+              </p>
+            </div>
+
+            <!-- Highlight 3 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">ESP32-Based Distributed Control</h4>
+                <span class="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">Dual-Core RTOS</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Hardware-isolated controllers manage motor safety interlocks, sensor ADC calibration, and fail-safe watchdog routines.
+              </p>
+            </div>
+
+            <!-- Highlight 4 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">Wireless Communication</h4>
+                <span class="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">Sub-1GHz Mesh</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Deep penetration subterranean RF mesh protocol with seamless Wi-Fi and LTE surface gateway bridges.
+              </p>
+            </div>
+
+            <!-- Highlight 5 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">Environmental Intelligence</h4>
+                <span class="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">Edge Neural</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Automated predictive explosion limit (LEL) alerting and trapped miner bio-signature classification.
+              </p>
+            </div>
+
+            <!-- Highlight 6 -->
+            <div class="p-4 rounded bg-brand-card border border-brand-border hover:border-brand-accent/50 transition-all">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="font-heading font-semibold text-brand-primaryText text-sm sm:text-base">Integrated DustCleaner</h4>
+                <span class="font-mono text-[10px] text-brand-warning bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">Active HEPA</span>
+              </div>
+              <p class="text-xs text-brand-secondaryText leading-relaxed">
+                Rapid cyclonic air filtration mechanism removes volatile coal aerosol clouds along exploratory corridors.
+              </p>
+            </div>
+
+          </div>
+
+          <!-- Section CTA -->
+          <div class="pt-2">
+            <a href="#technology" class="inline-flex items-center gap-2 text-sm font-semibold text-brand-accent hover:text-brand-primaryText transition-colors">
+              <span>Explore the Technology</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 8. HOW IT WORKS (Clean Horizontal Architecture Visualization)             -->
+  <!-- ========================================================================= -->
+  <section id="about" class="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative scroll-mt-20">
+    <div id="how-it-works" class="absolute -top-20"></div>
+    
+    <!-- Section Heading -->
+    <div class="text-center max-w-3xl mx-auto mb-16 space-y-3">
+      <div class="font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase">
+        DATA PIPELINE & SYSTEM ARCHITECTURE
+      </div>
+      <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-brand-primaryText tracking-tight">
+        From underground sensing to real-time intelligence.
+      </h2>
+      <p class="text-brand-secondaryText text-base sm:text-lg">
+        A resilient, distributed pipeline engineered without single points of failure to deliver zero-delay situational awareness.
+      </p>
+    </div>
+
+    <!-- Horizontal Architecture Steps with Connected Lines -->
+    <div class="relative">
+      
+      <!-- Connecting Line for Desktop -->
+      <div class="hidden lg:block absolute top-1/2 left-8 right-8 h-[2px] bg-brand-border -translate-y-6 z-0"></div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 relative z-10">
+        
+        <!-- STAGE 01 -->
+        <div class="bg-brand-card border border-brand-border rounded-lg p-5 flex flex-col justify-between hover-card-glow relative">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs font-bold text-brand-accent px-2 py-0.5 rounded bg-brand-secondary border border-brand-border">STAGE 01</span>
+              <i data-lucide="activity" class="w-5 h-5 text-brand-accent"></i>
+            </div>
+            <h3 class="font-heading text-lg font-bold text-brand-primaryText">SENSOR NETWORK</h3>
+            <p class="text-xs text-brand-secondaryText leading-relaxed">
+              Environmental sensors collect real-time readings including gas levels, temperature, humidity, and thermal imagery.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-brand-border/60 font-mono text-[10px] text-brand-secondaryText">
+            RAW I2C / SPI HARDWARE
+          </div>
+        </div>
+
+        <!-- STAGE 02 -->
+        <div class="bg-brand-card border border-brand-border rounded-lg p-5 flex flex-col justify-between hover-card-glow relative">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs font-bold text-brand-accent px-2 py-0.5 rounded bg-brand-secondary border border-brand-border">STAGE 02</span>
+              <i data-lucide="cpu" class="w-5 h-5 text-brand-accent"></i>
+            </div>
+            <h3 class="font-heading text-lg font-bold text-brand-primaryText">ESP32 CONTROLLERS</h3>
+            <p class="text-xs text-brand-secondaryText leading-relaxed">
+              Distributed microcontrollers collect and process hardware data, manage motor PID loops, and run edge filtering.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-brand-border/60 font-mono text-[10px] text-brand-secondaryText">
+            DUAL-CORE RTOS PROCESSING
+          </div>
+        </div>
+
+        <!-- STAGE 03 -->
+        <div class="bg-brand-card border border-brand-border rounded-lg p-5 flex flex-col justify-between hover-card-glow relative">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs font-bold text-brand-accent px-2 py-0.5 rounded bg-brand-secondary border border-brand-border">STAGE 03</span>
+              <i data-lucide="radio-tower" class="w-5 h-5 text-brand-accent"></i>
+            </div>
+            <h3 class="font-heading text-lg font-bold text-brand-primaryText">MQTT COMMUNICATION</h3>
+            <p class="text-xs text-brand-secondaryText leading-relaxed">
+              Telemetry and commands are transmitted through MQTT over subterranean long-range mesh radio channels.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-brand-border/60 font-mono text-[10px] text-brand-accent">
+            QoS-1 // &lt;15ms MESH
+          </div>
+        </div>
+
+        <!-- STAGE 04 -->
+        <div class="bg-brand-card border border-brand-border rounded-lg p-5 flex flex-col justify-between hover-card-glow relative">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs font-bold text-brand-accent px-2 py-0.5 rounded bg-brand-secondary border border-brand-border">STAGE 04</span>
+              <i data-lucide="database" class="w-5 h-5 text-brand-accent"></i>
+            </div>
+            <h3 class="font-heading text-lg font-bold text-brand-primaryText">CLOUD BACKEND</h3>
+            <p class="text-xs text-brand-secondaryText leading-relaxed">
+              Supabase stores readings and distributes live updates with instant websocket subscriptions and persistent telemetry logging.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-brand-border/60 font-mono text-[10px] text-brand-secondaryText">
+            SUPABASE REALTIME SYNC
+          </div>
+        </div>
+
+        <!-- STAGE 05 -->
+        <div class="bg-brand-card border border-brand-accent/50 rounded-lg p-5 flex flex-col justify-between hover-card-glow relative cyan-glow-subtle">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs font-bold text-brand-bg px-2 py-0.5 rounded bg-brand-accent">STAGE 05</span>
+              <i data-lucide="layout-dashboard" class="w-5 h-5 text-brand-accent"></i>
+            </div>
+            <h3 class="font-heading text-lg font-bold text-brand-primaryText">COMMAND CENTRE</h3>
+            <p class="text-xs text-brand-secondaryText leading-relaxed">
+              Operators visualize conditions, monitor alerts, inspect camera streams, and control rover operations in real time.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-brand-border/60 font-mono text-[10px] text-brand-accent font-semibold">
+            SECURE SURFACE TERMINAL
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 9. INTELLIGENT MONITORING SECTION (Dashboard Preview Style Visual)        -->
+  <!-- ========================================================================= -->
+  <section id="monitoring" class="py-24 bg-brand-secondary border-t border-brand-border relative">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <!-- Section Header -->
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between mb-12 gap-6">
+        <div>
+          <div class="font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase mb-2">
+            TELEMETRY HUD & SITUATIONAL AWARENESS
+          </div>
+          <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-brand-primaryText tracking-tight">
+            See what humans cannot.
+          </h2>
+          <p class="text-brand-secondaryText text-base sm:text-lg mt-2 max-w-xl">
+            Live preview of product monitoring capabilities, showcasing continuous gas concentrations, environmental diagnostics, and AI threat detection.
+          </p>
+        </div>
+        
+        <!-- Live Demo Badge -->
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-brand-card border border-brand-border font-mono text-xs text-brand-secondaryText">
+            <span class="w-2 h-2 rounded-full bg-brand-accent animate-pulse"></span>
+            SIMULATED TELEMETRY FEED (ACTIVE)
+          </span>
+        </div>
+      </div>
+
+      <!-- Dashboard Preview Container -->
+      <div class="rounded-xl bg-brand-card border border-brand-border p-4 sm:p-6 shadow-2xl relative overflow-hidden">
+        
+        <!-- Preview Top Bar -->
+        <div class="flex flex-wrap items-center justify-between pb-4 mb-6 border-b border-brand-border font-mono text-xs text-brand-secondaryText gap-4">
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-brand-secondaryText">SESSION:</span>
+              <span class="text-brand-primaryText font-semibold">SHAFT-B // ZONE 4</span>
+            </div>
+            <span class="text-brand-border">|</span>
+            <div class="flex items-center gap-2">
+              <span class="text-brand-secondaryText">MISSION TIMER:</span>
+              <span id="missionTimer" class="text-brand-accent font-semibold">03:44:18</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <span class="hidden sm:inline">COORDINATES: <strong class="text-brand-primaryText">23.7712° N, 86.4189° E (-428m)</strong></span>
+            <span class="px-2 py-0.5 rounded bg-brand-success/10 border border-brand-success/30 text-brand-success text-[10px] font-bold">LINK: 100% EXCELLENT</span>
+          </div>
+        </div>
+
+        <!-- 4 Gas Concentration Readings Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          
+          <!-- Gas 1: CH4 (Methane) -->
+          <div class="bg-brand-secondary/90 border border-brand-border rounded p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between font-mono text-xs mb-2">
+              <span class="text-brand-secondaryText">CH4 (Methane)</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-success/10 text-brand-success border border-brand-success/20">SAFE</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span id="gasCH4" class="font-mono text-2xl sm:text-3xl font-bold text-brand-primaryText">0.12</span>
+              <span class="text-xs font-mono text-brand-secondaryText">% VOL</span>
+            </div>
+            <div class="w-full bg-brand-bg rounded-full h-1.5 mt-3 overflow-hidden border border-brand-border/40">
+              <div class="bg-brand-success h-full rounded-full" style="width: 12%"></div>
+            </div>
+            <span class="font-mono text-[9px] text-brand-secondaryText mt-1.5">LEL Threshold: &lt; 1.00%</span>
+          </div>
+
+          <!-- Gas 2: CO (Carbon Monoxide) -->
+          <div class="bg-brand-secondary/90 border border-brand-border rounded p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between font-mono text-xs mb-2">
+              <span class="text-brand-secondaryText">CO (Carbon Monoxide)</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-success/10 text-brand-success border border-brand-success/20">SAFE</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span id="gasCO" class="font-mono text-2xl sm:text-3xl font-bold text-brand-primaryText">8</span>
+              <span class="text-xs font-mono text-brand-secondaryText">PPM</span>
+            </div>
+            <div class="w-full bg-brand-bg rounded-full h-1.5 mt-3 overflow-hidden border border-brand-border/40">
+              <div class="bg-brand-accent h-full rounded-full" style="width: 16%"></div>
+            </div>
+            <span class="font-mono text-[9px] text-brand-secondaryText mt-1.5">NIOSH Safe Limit: 25 PPM</span>
+          </div>
+
+          <!-- Gas 3: O2 (Oxygen) -->
+          <div class="bg-brand-secondary/90 border border-brand-border rounded p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between font-mono text-xs mb-2">
+              <span class="text-brand-secondaryText">O2 (Oxygen)</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-accent/10 text-brand-accent border border-brand-accent/20">NORMAL</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span id="gasO2" class="font-mono text-2xl sm:text-3xl font-bold text-brand-accent">20.8</span>
+              <span class="text-xs font-mono text-brand-secondaryText">% VOL</span>
+            </div>
+            <div class="w-full bg-brand-bg rounded-full h-1.5 mt-3 overflow-hidden border border-brand-border/40">
+              <div class="bg-brand-accent h-full rounded-full" style="width: 88%"></div>
+            </div>
+            <span class="font-mono text-[9px] text-brand-secondaryText mt-1.5">Optimal Range: 19.5% – 23.5%</span>
+          </div>
+
+          <!-- Gas 4: H2S (Hydrogen Sulfide) -->
+          <div class="bg-brand-secondary/90 border border-brand-border rounded p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between font-mono text-xs mb-2">
+              <span class="text-brand-secondaryText">H2S (Hydrogen Sulfide)</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-success/10 text-brand-success border border-brand-success/20">SAFE</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span id="gasH2S" class="font-mono text-2xl sm:text-3xl font-bold text-brand-primaryText">0.0</span>
+              <span class="text-xs font-mono text-brand-secondaryText">PPM</span>
+            </div>
+            <div class="w-full bg-brand-bg rounded-full h-1.5 mt-3 overflow-hidden border border-brand-border/40">
+              <div class="bg-brand-success h-full rounded-full" style="width: 2%"></div>
+            </div>
+            <span class="font-mono text-[9px] text-brand-secondaryText mt-1.5">Toxic Ceiling: 10 PPM</span>
+          </div>
+
+        </div>
+
+        <!-- Environmental Metrics Bar (Temperature, Humidity, Air Quality) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 rounded bg-brand-bg border border-brand-border font-mono text-xs">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-secondary flex items-center justify-center text-brand-accent">
+              <i data-lucide="thermometer" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-[10px] text-brand-secondaryText">Ambient Temp</div>
+              <div id="envTemp" class="text-sm font-bold text-brand-primaryText">24.2 °C</div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-secondary flex items-center justify-center text-brand-accent">
+              <i data-lucide="droplets" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-[10px] text-brand-secondaryText">Rel. Humidity</div>
+              <div id="envHumidity" class="text-sm font-bold text-brand-primaryText">62.4 %</div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-secondary flex items-center justify-center text-brand-accent">
+              <i data-lucide="gauge" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-[10px] text-brand-secondaryText">Barometer</div>
+              <div class="text-sm font-bold text-brand-primaryText">1,048 hPa</div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-secondary flex items-center justify-center text-brand-accent">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-[10px] text-brand-secondaryText">Air Quality (AQI)</div>
+              <div class="text-sm font-bold text-brand-success">42 (Nominal)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Monitoring Feed with AI Human & Fire Detection Bounding Boxes -->
+        <div class="relative rounded-lg overflow-hidden border border-brand-border bg-black aspect-[21/9] sm:aspect-[2.2/1]">
+          
+          <!-- Camera Feed Video/Image Simulator -->
+          <img 
+            src="assets/t-rover.png" 
+            alt="Robotic Camera HUD Stream" 
+            class="w-full h-full object-cover object-center opacity-75 filter grayscale-[30%] contrast-110"
+          >
+
+          <!-- Scanline and CRT Simulation Overlay -->
+          <div class="absolute inset-0 scanlines pointer-events-none"></div>
+
+          <!-- Tactical HUD Frame Overlay -->
+          <div class="absolute inset-0 p-4 sm:p-6 flex flex-col justify-between pointer-events-none">
+            
+            <!-- Top Camera Status Bar -->
+            <div class="flex items-center justify-between text-xs font-mono">
+              <div class="flex items-center gap-2 bg-brand-bg/85 px-3 py-1.5 rounded border border-brand-border">
+                <span class="w-2 h-2 rounded-full bg-brand-danger animate-ping"></span>
+                <span class="text-brand-primaryText font-bold">LIVE CAM // TURRET OPTICAL 01</span>
+              </div>
+
+              <!-- Threat Alert Badges -->
+              <div class="flex items-center gap-2">
+                <span class="bg-brand-bg/85 border border-brand-border text-brand-secondaryText px-2.5 py-1 rounded text-[11px]">
+                  SMOKE: <strong class="text-brand-success">NONE</strong>
+                </span>
+                <span class="bg-brand-bg/85 border border-brand-border text-brand-secondaryText px-2.5 py-1 rounded text-[11px]">
+                  FIRE: <strong class="text-brand-success">CLEARED</strong>
+                </span>
+              </div>
+            </div>
+
+            <!-- Center: AI Detection Bounding Box -->
+            <div class="self-center border-2 border-brand-accent bg-brand-accent/10 rounded p-2 text-center font-mono text-[11px] cyan-glow shadow-xl">
+              <div class="flex items-center justify-between gap-4 text-[9px] bg-brand-accent text-brand-bg px-1.5 py-0.5 rounded-sm font-bold mb-1">
+                <span>TARGET #01</span>
+                <span>CONF: 98.4%</span>
+              </div>
+              <div class="text-brand-accent font-bold tracking-wider py-1 sm:py-2 px-4">
+                HUMAN DETECTED
+              </div>
+              <div class="text-[9px] text-brand-secondaryText">BIO-METRIC THERMAL LOCK</div>
+            </div>
+
+            <!-- Bottom Camera Controls -->
+            <div class="flex items-center justify-between text-xs font-mono">
+              <div class="bg-brand-bg/85 border border-brand-border text-brand-secondaryText px-3 py-1.5 rounded text-[11px]">
+                FOV: 120° • THERMAL SENSOR: ACTIVE • ZOOM: 1.5X
+              </div>
+              <div class="bg-brand-danger/20 border border-brand-danger/40 text-brand-danger px-3 py-1.5 rounded text-[11px] font-bold">
+                E-STOP ARMED // STANDBY
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 10. FINAL CTA (Spacious, Premium Closing Section)                          -->
+  <!-- ========================================================================= -->
+  <section class="py-28 relative overflow-hidden bg-brand-bg border-t border-brand-border text-center">
+    
+    <!-- Subtle Cyan Radial Glow Background -->
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div class="w-[700px] h-[350px] bg-brand-accent/12 rounded-full blur-[150px]"></div>
+    </div>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
+      
+      <div class="inline-flex items-center gap-2 font-mono text-xs font-semibold tracking-wider text-brand-accent uppercase px-3 py-1 rounded bg-brand-secondary border border-brand-border">
+        <span>INDUSTRIAL SAFETY PLATFORM</span>
+      </div>
+
+      <h2 class="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold text-brand-primaryText tracking-tight">
+        Building safer underground operations.
+      </h2>
+
+      <p class="text-brand-secondaryText text-base sm:text-xl max-w-2xl mx-auto leading-relaxed">
+        Explore how intelligent robotics and real-time environmental intelligence can transform mine safety and rescue operations.
+      </p>
+
+      <div class="pt-4 flex flex-wrap items-center justify-center gap-4">
+        <button onclick="openCommandModal()" class="inline-flex items-center gap-2 px-8 py-4 rounded font-semibold text-base bg-brand-accent hover:bg-brand-accent-hover text-brand-bg transition-all duration-200 cyan-glow active:scale-[0.98]">
+          <span>Enter Command Centre</span>
+          <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+        </button>
+
+        <a href="#t-rover" class="inline-flex items-center gap-2 px-7 py-4 rounded font-semibold text-base bg-brand-card hover:bg-brand-secondary text-brand-primaryText border border-brand-border hover:border-brand-accent transition-all duration-200">
+          <span>Review Technical Specs</span>
+          <i data-lucide="chevron-right" class="w-5 h-5 text-brand-accent"></i>
+        </a>
+      </div>
+
+      <!-- Standards Badges -->
+      <div class="pt-8 text-xs font-mono text-brand-secondaryText flex flex-wrap items-center justify-center gap-6">
+        <span>ISO 10218 ROBOTIC SAFETY COMPLIANT</span>
+        <span>•</span>
+        <span>ATEX ZONE 1 CERTIFIED DESIGN</span>
+        <span>•</span>
+        <span>MISSION CRITICAL SLA 99.99%</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 11. FOOTER                                                                -->
+  <!-- ========================================================================= -->
+  <footer class="w-full bg-[#05080E] border-t border-brand-border py-14">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start justify-between pb-12 border-b border-brand-border/60">
+        
+        <!-- Left: Brand & Tagline -->
+        <div class="md:col-span-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-secondary border border-brand-border flex items-center justify-center">
+              <svg class="w-4 h-4 text-brand-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+            </div>
+            <span class="font-heading text-2xl font-bold tracking-wider text-brand-primaryText">TRAYATE</span>
+          </div>
+          <p class="text-sm text-brand-secondaryText max-w-sm">
+            Intelligent Mine Safety & Rescue System.
+          </p>
+          <p class="text-xs text-brand-secondaryText/80 font-mono">
+            Empowering mining enterprises with autonomous rover technology and zero-latency environmental intelligence.
+          </p>
+        </div>
+
+        <!-- Center: Primary Navigation Links -->
+        <div class="md:col-span-4 space-y-3">
+          <div class="font-mono text-xs font-semibold text-brand-accent tracking-widest uppercase">NAVIGATION</div>
+          <ul class="space-y-2 text-sm text-brand-secondaryText">
+            <li><a href="#home" class="hover:text-brand-primaryText transition-colors">Home</a></li>
+            <li><a href="#technology" class="hover:text-brand-primaryText transition-colors">Technology</a></li>
+            <li><a href="#t-rover" class="hover:text-brand-primaryText transition-colors">T-Rover</a></li>
+            <li><a href="#capabilities" class="hover:text-brand-primaryText transition-colors">Capabilities</a></li>
+            <li><a href="#about" class="hover:text-brand-primaryText transition-colors">About</a></li>
+          </ul>
+        </div>
+
+        <!-- Right: Additional Links -->
+        <div class="md:col-span-3 space-y-3">
+          <div class="font-mono text-xs font-semibold text-brand-accent tracking-widest uppercase">RESOURCES</div>
+          <ul class="space-y-2 text-sm text-brand-secondaryText">
+            <li><button onclick="openCommandModal()" class="hover:text-brand-primaryText transition-colors text-left">Command Centre</button></li>
+            <li><a href="mailto:contact@trayate.systems" class="hover:text-brand-primaryText transition-colors">Contact Engineering</a></li>
+            <li><a href="https://github.com" target="_blank" rel="noopener noreferrer" class="hover:text-brand-primaryText transition-colors flex items-center gap-1.5">
+              <span>GitHub</span>
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            </a></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Bottom Copyright Strip -->
+      <div class="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-brand-secondaryText gap-4">
+        <div>
+          © 2026 TRAYATE. All rights reserved.
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="hover:text-brand-primaryText cursor-pointer">Privacy Policy</span>
+          <span>•</span>
+          <span class="hover:text-brand-primaryText cursor-pointer">Terms of Service</span>
+          <span>•</span>
+          <span class="text-brand-accent">Industrial Firmware v4.8.2</span>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ========================================================================= -->
+  <!-- COMMAND CENTRE PREVIEW MODAL (Interactive UX for CTA / Launch Buttons)     -->
+  <!-- ========================================================================= -->
+  <div id="commandModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="bg-brand-card border border-brand-accent/50 rounded-xl max-w-2xl w-full p-6 sm:p-8 relative cyan-glow">
+      
+      <!-- Close Button -->
+      <button onclick="closeCommandModal()" class="absolute top-4 right-4 text-brand-secondaryText hover:text-brand-primaryText p-1">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+
+      <!-- Modal Header -->
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded bg-brand-secondary border border-brand-accent flex items-center justify-center text-brand-accent">
+          <i data-lucide="terminal" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="font-heading text-xl font-bold text-brand-primaryText">TRAYATE Command Centre</h3>
+          <p class="font-mono text-xs text-brand-accent">SECURE SURFACE TELEMETRY TERMINAL</p>
+        </div>
+      </div>
+
+      <p class="text-sm text-brand-secondaryText mb-6">
+        The public landing page is currently operating in showcase mode. The dedicated Command Centre operates on an authenticated Supabase backend with encrypted MQTT streaming for direct rover remote control.
+      </p>
+
+      <!-- Demo Credentials / Connection Info Box -->
+      <div class="bg-brand-bg rounded border border-brand-border p-4 font-mono text-xs space-y-2 mb-6">
+        <div class="flex justify-between text-brand-secondaryText">
+          <span>HOST GATEWAY:</span>
+          <span class="text-brand-primaryText">wss://telemetry.trayate.systems/mqtt</span>
+        </div>
+        <div class="flex justify-between text-brand-secondaryText">
+          <span>ENCRYPTION:</span>
+          <span class="text-brand-success">TLS 1.3 / AES-256-GCM</span>
+        </div>
+        <div class="flex justify-between text-brand-secondaryText">
+          <span>DATABASE STATE:</span>
+          <span class="text-brand-accent">Supabase Realtime PostgreSQL 16</span>
+        </div>
+        <div class="flex justify-between text-brand-secondaryText">
+          <span>ONLINE ROVERS:</span>
+          <span class="text-brand-primaryText">1 Unit (T-Rover 01)</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3">
+        <button onclick="closeCommandModal()" class="px-5 py-2.5 rounded bg-brand-secondary border border-brand-border text-sm text-brand-primaryText hover:bg-brand-border">
+          Dismiss
+        </button>
+        <button onclick="alert('Telemetry stream connected in demonstration mode.'); closeCommandModal();" class="px-5 py-2.5 rounded bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-sm font-semibold">
+          Initiate Demo Link
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Initialize Lucide Icons & Dynamic Telemetry Simulation -->
+  <script>
+    // Render all Lucide Icons
+    lucide.createIcons();
+
+    // Mobile Menu Toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    // Close mobile menu on link click
+    mobileMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+    });
+
+    // Command Centre Modal logic
+    function openCommandModal() {
+      document.getElementById('commandModal').classList.remove('hidden');
+    }
+    function closeCommandModal() {
+      document.getElementById('commandModal').classList.add('hidden');
+    }
+
+    // Escape key closes modal
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeCommandModal();
+    });
+
+    // Realistic Telemetry Ticker Simulation (Simulating live data from sensors / Supabase)
+    setInterval(() => {
+      // Small natural jitter on Methane (0.11 - 0.13%)
+      const ch4 = (0.11 + Math.random() * 0.03).toFixed(2);
+      const gasCH4El = document.getElementById('gasCH4');
+      if (gasCH4El) gasCH4El.innerText = ch4;
+
+      // Small natural jitter on CO (7 - 9 ppm)
+      const co = Math.floor(7 + Math.random() * 3);
+      const gasCOEl = document.getElementById('gasCO');
+      if (gasCOEl) gasCOEl.innerText = co;
+
+      // Small natural jitter on O2 (20.7 - 20.9%)
+      const o2 = (20.7 + Math.random() * 0.3).toFixed(1);
+      const gasO2El = document.getElementById('gasO2');
+      if (gasO2El) gasO2El.innerText = o2;
+
+      // Small natural jitter on Temp (24.1 - 24.4 C)
+      const temp = (24.1 + Math.random() * 0.3).toFixed(1);
+      const envTempEl = document.getElementById('envTemp');
+      if (envTempEl) envTempEl.innerText = `${temp} °C`;
+
+      // Small natural jitter on Humidity (62.1 - 62.7 %)
+      const hum = (62.1 + Math.random() * 0.6).toFixed(1);
+      const envHumEl = document.getElementById('envHumidity');
+      if (envHumEl) envHumEl.innerText = `${hum} %`;
+    }, 2800);
+  </script>
+
+</body>
+</html>

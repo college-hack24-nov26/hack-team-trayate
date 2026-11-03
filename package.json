@@ -1,0 +1,20 @@
+{
+  "name": "trayate-landing-page",
+  "version": "1.0.0",
+  "description": "TRAYATE – Intelligent Mine Safety & Rescue System SaaS Landing Page",
+  "scripts": {
+    "start": "npx serve -l 3000 .",
+    "serve": "npx serve -l 3000 .",
+    "dev": "python -m http.server 3000"
+  },
+  "keywords": [
+    "trayate",
+    "mine-safety",
+    "robotics",
+    "t-rover",
+    "saas"
+  ],
+  "author": "TRAYATE Engineering",
+  "license": "UNLICENSED"
+}
+
