@@ -617,30 +617,33 @@ export default function LiveCameraFeed() {
       }`}
     >
       {/* Top Header */}
-      <div className="h-10 px-3 bg-brand-secondary border-b border-brand-border flex items-center justify-between text-xs font-mono shrink-0">
-        <div className="flex items-center gap-2">
-          <Camera className="w-3.5 h-3.5 text-brand-accent" />
-          <span className="font-sans font-semibold text-brand-primaryText text-[11px] sm:text-xs">
-            ROVER OPTICAL FEED
+      <div className="h-12 px-4 bg-brand-secondary border-b border-brand-border flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent">
+            <Camera className="w-4 h-4" />
+          </div>
+          <span className="font-sans font-semibold text-brand-primaryText text-sm">
+            Live Optical Feed
           </span>
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
             telemetry.camera.status === 'CONNECTED'
               ? 'bg-brand-success/15 border-brand-success/40 text-brand-success'
               : telemetry.camera.status === 'CONNECTING'
               ? 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning animate-pulse'
               : 'bg-brand-bg border-brand-border text-brand-secondaryText'
           }`}>
-            {telemetry.camera.status}
+            <span className={`w-1.5 h-1.5 rounded-full ${telemetry.camera.status === 'CONNECTED' ? 'bg-brand-success animate-pulse' : telemetry.camera.status === 'CONNECTING' ? 'bg-brand-warning' : 'bg-brand-secondaryText'}`}></span>
+            <span>{telemetry.camera.status === 'CONNECTED' ? 'Live' : telemetry.camera.status === 'CONNECTING' ? 'Connecting...' : 'Offline'}</span>
           </span>
           {telemetry.camera.status === 'CONNECTED' && (
-            <span className="text-[10px] text-brand-success font-semibold hidden sm:inline">
-              ⚡ {frameLatency}ms LAG
+            <span className="text-xs text-brand-secondaryText hidden sm:inline">
+              {frameLatency}ms latency • {fps} FPS
             </span>
           )}
         </div>
 
         {/* Engine Switcher, AI Human Detection Toggle & Controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           
           {/* AI Human Detection Toggle Button */}
           <button
@@ -654,49 +657,50 @@ export default function LiveCameraFeed() {
                 setActiveAlert(null);
               }
             }}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
               humanDetectionActive
-                ? 'bg-brand-success/20 border-brand-success/50 text-brand-success shadow-xs'
+                ? 'bg-brand-success/15 border-brand-success/40 text-brand-success shadow-xs'
                 : 'bg-brand-bg border-brand-border text-brand-secondaryText hover:text-brand-primaryText'
             }`}
             title="Toggle Real-Time AI Human Detection on Camera Feed"
           >
             {humanDetectionActive ? (
-              <UserCheck className="w-3 h-3 text-brand-success animate-pulse" />
+              <UserCheck className="w-3.5 h-3.5 text-brand-success" />
             ) : (
-              <UserX className="w-3 h-3 text-brand-secondaryText" />
+              <UserX className="w-3.5 h-3.5 text-brand-secondaryText" />
             )}
-            <span className="hidden sm:inline">AI HUMAN DETECT:</span>
-            <span>{humanDetectionActive ? 'ON' : 'OFF'}</span>
+            <span className="hidden sm:inline">AI Human Detection:</span>
+            <span>{humanDetectionActive ? 'On' : 'Off'}</span>
           </button>
 
-          <div className="flex items-center gap-0.5 bg-brand-bg p-0.5 rounded border border-brand-border text-[9px]">
+          {/* Stream Engine Toggle */}
+          <div className="flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
             <button
               onClick={() => {
                 setRenderMode('canvas_fast');
                 isLoopRunningRef.current = true;
                 setCameraStatus('CONNECTING');
               }}
-              className={`px-1.5 py-0.5 rounded transition-colors ${
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
                 renderMode === 'canvas_fast'
-                  ? 'bg-brand-success text-brand-bg font-bold shadow-sm'
+                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
                   : 'text-brand-secondaryText hover:text-brand-primaryText'
               }`}
-              title="Ultra-Low Latency Canvas Pipeline (<70ms real-time delay)"
+              title="Direct canvas render (<70ms zero-lag pipeline)"
             >
-              ⚡ ZERO-LAG
+              Zero-Lag
             </button>
             <button
               onClick={() => {
                 setRenderMode('native_mjpeg');
                 isLoopRunningRef.current = false;
               }}
-              className={`px-1.5 py-0.5 rounded transition-colors ${
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
                 renderMode === 'native_mjpeg'
-                  ? 'bg-brand-accent text-brand-bg font-bold'
+                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
                   : 'text-brand-secondaryText hover:text-brand-primaryText'
               }`}
-              title="Continuous MJPEG Stream (/video)"
+              title="Continuous MJPEG stream (/video)"
             >
               MJPEG
             </button>
@@ -704,20 +708,20 @@ export default function LiveCameraFeed() {
 
           <button
             onClick={() => setShowDiagnostics(!showDiagnostics)}
-            className={`p-1 rounded hover:bg-brand-bg transition-colors ${
+            className={`p-2 rounded-lg hover:bg-brand-bg transition-colors ${
               showDiagnostics ? 'text-brand-accent' : 'text-brand-secondaryText'
             }`}
-            title="Stream Diagnostics & Latency Tuner"
+            title="Stream Diagnostics & Settings"
           >
-            <Sliders className="w-3.5 h-3.5" />
+            <Sliders className="w-4 h-4" />
           </button>
 
           <button
             onClick={toggleFullscreen}
-            className="p-1 rounded text-brand-secondaryText hover:text-brand-primaryText hover:bg-brand-bg transition-colors"
+            className="p-2 rounded-lg text-brand-secondaryText hover:text-brand-primaryText hover:bg-brand-bg transition-colors"
             title="Toggle Fullscreen"
           >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
@@ -756,45 +760,45 @@ export default function LiveCameraFeed() {
 
             {/* Connecting Spinner Overlay */}
             {telemetry.camera.status === 'CONNECTING' && fps === 0 && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 font-mono text-xs text-brand-accent">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-xs font-sans text-brand-accent">
                 <RefreshCw className="w-6 h-6 animate-spin text-brand-accent" />
-                <span>CONNECTING ULTRA-LOW LATENCY STREAM...</span>
+                <span className="font-medium">Connecting camera stream...</span>
               </div>
             )}
 
             {/* Top Tactical Alert Banner (Multi-Human Support + Anti-Spam Acknowledge) */}
             {humanDetectionActive && activeAlert && (
-              <div className={`absolute top-2 inset-x-3 mx-auto max-w-lg rounded-lg border-2 px-3 py-2 flex items-center justify-between shadow-2xl backdrop-blur-md z-30 transition-all ${
+              <div className={`absolute top-3 inset-x-4 mx-auto max-w-md rounded-xl border px-3.5 py-2.5 flex items-center justify-between shadow-xl backdrop-blur-md z-30 transition-all ${
                 activeAlert.type === 'MULTIPLE'
-                  ? 'bg-brand-bg/95 border-brand-accent text-brand-accent shadow-[0_0_20px_rgba(56,189,248,0.35)]'
-                  : 'bg-brand-bg/95 border-brand-success text-brand-success shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                  ? 'bg-brand-bg/95 border-brand-accent text-brand-accent shadow-brand-accent/20'
+                  : 'bg-brand-bg/95 border-brand-success text-brand-success shadow-brand-success/20'
               }`}>
-                <div className="flex items-center gap-2 font-mono text-xs font-bold truncate pr-2">
+                <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold truncate pr-2">
                   {activeAlert.type === 'MULTIPLE' ? (
-                    <Users className="w-4 h-4 text-brand-accent shrink-0 animate-bounce" />
+                    <Users className="w-4 h-4 text-brand-accent shrink-0" />
                   ) : (
-                    <UserCheck className="w-4 h-4 text-brand-success shrink-0 animate-pulse" />
+                    <UserCheck className="w-4 h-4 text-brand-success shrink-0" />
                   )}
                   <span className="truncate">{activeAlert.message}</span>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono text-[10px] bg-brand-secondary text-brand-primaryText px-2 py-0.5 rounded border border-brand-border">
-                    {activeAlert.confidence}% CONF • {activeAlert.nearestDistance}m
+                  <span className="text-[11px] font-mono bg-brand-secondary text-brand-primaryText px-2 py-0.5 rounded border border-brand-border">
+                    {activeAlert.confidence}% • {activeAlert.nearestDistance}m
                   </span>
                   
                   {!isAlertAcknowledged ? (
                     <button
                       onClick={acknowledgeCurrentAlert}
-                      className="px-2 py-0.5 rounded bg-brand-card hover:bg-brand-secondary border border-brand-border text-brand-primaryText text-[10px] font-mono font-semibold transition-colors flex items-center gap-1"
-                      title="Silence repeat alerts for this event"
+                      className="px-2.5 py-1 rounded-md bg-brand-card hover:bg-brand-secondary border border-brand-border text-brand-primaryText text-xs font-medium transition-colors flex items-center gap-1"
+                      title="Silence sound alerts for this detection"
                     >
-                      <BellOff className="w-3 h-3 text-brand-warning" />
-                      <span>Mute Alert</span>
+                      <BellOff className="w-3.5 h-3.5 text-brand-warning" />
+                      <span>Mute</span>
                     </button>
                   ) : (
-                    <span className="text-[10px] font-mono text-brand-success px-1.5 py-0.5 rounded bg-brand-success/15 border border-brand-success/30 font-semibold">
-                      ACKNOWLEDGED
+                    <span className="text-xs text-brand-success px-2 py-0.5 rounded bg-brand-success/15 border border-brand-success/30 font-medium">
+                      Muted
                     </span>
                   )}
                 </div>
@@ -802,71 +806,71 @@ export default function LiveCameraFeed() {
             )}
 
             {/* Live HUD Overlay (Left) */}
-            <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded text-[10px] font-mono text-white/90 border border-white/10 pointer-events-none z-10 shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-brand-danger animate-ping"></span>
-              <span className="font-bold text-brand-danger">LIVE</span>
-              <span className="text-white/40">|</span>
-              <span className="text-brand-success font-semibold">{frameLatency}ms LAG</span>
-              <span className="text-white/40">|</span>
-              <span className="text-brand-accent font-semibold">{fps > 0 ? `${fps} FPS` : 'CONNECTING'}</span>
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-sans text-white/90 border border-white/10 pointer-events-none z-10 shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-brand-danger animate-pulse"></span>
+              <span className="font-semibold text-brand-danger">Live</span>
+              <span className="text-white/30">•</span>
+              <span className="text-brand-success">{frameLatency}ms</span>
+              <span className="text-white/30">•</span>
+              <span className="text-white/80">{fps > 0 ? `${fps} FPS` : 'Connecting'}</span>
               {humanDetectionActive && (
                 <>
-                  <span className="text-white/40">|</span>
-                  <span className={`font-bold flex items-center gap-1 ${
+                  <span className="text-white/30">•</span>
+                  <span className={`font-medium flex items-center gap-1 ${
                     detectedHumans.length > 0 ? (detectedHumans.length > 1 ? 'text-brand-accent' : 'text-brand-success') : 'text-brand-secondaryText'
                   }`}>
-                    <Scan className="w-3 h-3" />
-                    <span>{detectedHumans.length > 0 ? `${detectedHumans.length} ${detectedHumans.length === 1 ? 'HUMAN' : 'HUMANS'}` : 'AI SCANNING'}</span>
+                    <Scan className="w-3.5 h-3.5" />
+                    <span>{detectedHumans.length > 0 ? `${detectedHumans.length} ${detectedHumans.length === 1 ? 'Person' : 'People'}` : 'Scanning'}</span>
                   </span>
                 </>
               )}
             </div>
 
             {/* Direct Connection Badge (Right) */}
-            <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono text-brand-success border border-brand-success/30 pointer-events-none z-10 flex items-center gap-1 shadow-md">
-              <Zap className="w-3 h-3 text-brand-success" />
-              <span>DIRECT LAN (0 HOPS)</span>
+            <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs font-sans text-brand-success border border-brand-success/30 pointer-events-none z-10 flex items-center gap-1.5 shadow-md">
+              <Zap className="w-3.5 h-3.5 text-brand-success" />
+              <span>Direct LAN</span>
             </div>
           </div>
         ) : (
           /* Disconnected State */
-          <div className="p-6 text-center max-w-sm space-y-3">
-            <div className="w-12 h-12 rounded-full bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
-              <WifiOff className="w-6 h-6 text-brand-secondaryText" />
+          <div className="p-8 text-center max-w-md space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
+              <WifiOff className="w-7 h-7 text-brand-secondaryText" />
             </div>
 
-            <div className="space-y-1">
-              <h4 className="text-xs sm:text-sm font-semibold text-brand-primaryText">
-                Rover Optical Feed Offline
+            <div className="space-y-1.5">
+              <h4 className="text-base font-semibold text-brand-primaryText">
+                Camera Feed Disconnected
               </h4>
-              <p className="text-[11px] text-brand-secondaryText leading-relaxed">
-                Connect to <strong className="text-brand-accent">IP Webcam</strong> on T-Rover chassis at <code className="text-brand-primaryText">http://192.168.4.57:8080</code>.
+              <p className="text-xs text-brand-secondaryText leading-relaxed">
+                Connect to <strong className="text-brand-accent">IP Webcam</strong> on the rover smartphone at <code className="text-brand-primaryText font-mono">http://192.168.4.57:8080</code>.
               </p>
             </div>
 
             {connectionError && (
-              <div className="p-2 rounded bg-brand-danger/10 border border-brand-danger/30 text-brand-danger text-[10px] text-left font-mono">
+              <div className="p-2.5 rounded-lg bg-brand-danger/10 border border-brand-danger/30 text-brand-danger text-xs text-left">
                 {connectionError}
               </div>
             )}
 
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
               <button
                 onClick={handleConnect}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold font-mono shadow-sm"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold shadow-sm transition-all"
               >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Connect Zero-Lag Feed</span>
+                <Play className="w-4 h-4 fill-current" />
+                <span>Connect Live Feed</span>
               </button>
 
               <a
                 href={getBaseHost()}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-secondaryText hover:text-brand-primaryText text-xs font-mono border border-brand-border"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-secondaryText hover:text-brand-primaryText text-xs font-medium border border-brand-border transition-colors"
               >
                 <span>Camera Hub</span>
-                <ExternalLink className="w-3 h-3" />
+                <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
           </div>
@@ -874,44 +878,44 @@ export default function LiveCameraFeed() {
 
         {/* Diagnostics & Remote Resolution Tuning Drawer */}
         {showDiagnostics && (
-          <div className="absolute top-2 right-2 w-80 bg-brand-secondary/95 border border-brand-border rounded-lg p-3 text-[10px] font-mono text-brand-secondaryText space-y-2.5 shadow-2xl backdrop-blur-md z-30">
-            <div className="font-bold text-brand-primaryText flex items-center justify-between pb-1 border-b border-brand-border">
-              <span className="flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-brand-accent" />
-                <span>LATENCY OPTIMIZER & RESOLUTION</span>
+          <div className="absolute top-3 right-3 w-80 bg-brand-secondary/95 border border-brand-border rounded-xl p-4 text-xs font-sans text-brand-secondaryText space-y-3 shadow-2xl backdrop-blur-md z-30">
+            <div className="font-semibold text-brand-primaryText flex items-center justify-between pb-2 border-b border-brand-border">
+              <span className="flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-brand-accent" />
+                <span>Camera Diagnostics</span>
               </span>
-              <span className="text-brand-success font-bold">{frameLatency}ms</span>
+              <span className="text-brand-success font-mono font-bold">{frameLatency}ms</span>
             </div>
 
-            <div className="space-y-1.5">
-              <span className="text-[9px] uppercase text-brand-primaryText font-bold">1-Click Latency Modes:</span>
-              <div className="grid grid-cols-3 gap-1">
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-brand-primaryText">Resolution & Latency:</span>
+              <div className="grid grid-cols-3 gap-1.5">
                 <button
                   onClick={() => setRemoteOptimization('640x480', 25)}
-                  className={`p-1.5 rounded border text-[9px] font-bold transition-colors ${
+                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
                     resPreset === '640x480'
-                      ? 'bg-brand-success text-brand-bg border-brand-success'
+                      ? 'bg-brand-success text-brand-bg border-brand-success font-semibold'
                       : 'bg-brand-bg hover:bg-brand-card text-brand-success border-brand-success/40'
                   }`}
-                  title="640x480 @ Quality 25 - Lowest possible latency (<50ms)"
+                  title="640x480 @ Quality 25 - Lowest possible latency"
                 >
-                  ⚡ TURBO (640x480)
+                  Turbo (640p)
                 </button>
                 <button
                   onClick={() => setRemoteOptimization('800x480', 35)}
-                  className={`p-1.5 rounded border text-[9px] font-bold transition-colors ${
+                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
                     resPreset === '800x480'
-                      ? 'bg-brand-accent text-brand-bg border-brand-accent'
+                      ? 'bg-brand-accent text-brand-bg border-brand-accent font-semibold'
                       : 'bg-brand-bg hover:bg-brand-card text-brand-accent border-brand-border'
                   }`}
                 >
-                  BALANCED
+                  Balanced
                 </button>
                 <button
                   onClick={() => setRemoteOptimization('1280x720', 40)}
-                  className={`p-1.5 rounded border text-[9px] font-bold transition-colors ${
+                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
                     resPreset === '1280x720'
-                      ? 'bg-brand-primaryText text-brand-bg border-brand-primaryText'
+                      ? 'bg-brand-primaryText text-brand-bg border-brand-primaryText font-semibold'
                       : 'bg-brand-bg hover:bg-brand-card text-brand-secondaryText border-brand-border'
                   }`}
                 >
@@ -921,53 +925,45 @@ export default function LiveCameraFeed() {
             </div>
 
             {/* AI Human Detection Status Drawer Section */}
-            <div className="space-y-1 pt-1.5 border-t border-brand-border text-[9px]">
+            <div className="space-y-1.5 pt-2 border-t border-brand-border text-xs">
               <div className="flex justify-between">
-                <span>AI Neural Network:</span>
-                <span className="text-brand-accent font-bold">
+                <span>Vision Model:</span>
+                <span className="text-brand-accent font-medium">
                   {modelStatus === 'READY' ? 'MobileNet v2 COCO-SSD' : modelStatus === 'LOADING' ? 'Initializing weights...' : 'Standby'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>AI Inference Time:</span>
-                <span className="text-brand-success font-bold">{inferenceLatency} ms (Async Worker)</span>
+                <span>Inference Time:</span>
+                <span className="text-brand-success font-mono">{inferenceLatency} ms</span>
               </div>
               <div className="flex justify-between">
-                <span>Human Targets Acquired:</span>
-                <span className={detectedHumans.length > 0 ? 'text-brand-success font-bold' : 'text-brand-secondaryText'}>
-                  {detectedHumans.length > 0 ? `${detectedHumans.length} INDIVIDUAL(S)` : '0 (SECTOR CLEAR)'}
+                <span>Humans Detected:</span>
+                <span className={detectedHumans.length > 0 ? 'text-brand-success font-semibold' : 'text-brand-secondaryText'}>
+                  {detectedHumans.length > 0 ? `${detectedHumans.length} detected` : 'None (Clear)'}
                 </span>
               </div>
               {detectedHumans.length > 0 && (
                 <div className="flex justify-between">
                   <span>Nearest Distance:</span>
-                  <span className="text-brand-success font-bold">{Math.min(...detectedHumans.map(d => d.distanceMeters))} m</span>
+                  <span className="text-brand-success font-mono">{Math.min(...detectedHumans.map(d => d.distanceMeters))} m</span>
                 </div>
               )}
             </div>
 
-            <div className="space-y-1 pt-1 border-t border-brand-border text-[9px]">
+            <div className="space-y-1.5 pt-2 border-t border-brand-border text-xs">
               <div className="flex justify-between">
-                <span>Active Pipeline:</span>
-                <span className="text-brand-primaryText font-bold">
-                  {renderMode === 'canvas_fast' ? 'Direct Canvas Loop (Zero Buffer)' : 'MJPEG Stream'}
+                <span>Active Engine:</span>
+                <span className="text-brand-primaryText font-medium">
+                  {renderMode === 'canvas_fast' ? 'Direct Canvas Loop' : 'MJPEG Stream'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Direct Frame Latency:</span>
-                <span className="text-brand-success font-bold">{frameLatency} ms</span>
-              </div>
-              <div className="flex justify-between">
                 <span>Frame Rate:</span>
-                <span className="text-brand-accent font-bold">{fps} FPS</span>
+                <span className="text-brand-accent font-mono">{fps} FPS</span>
               </div>
               <div className="flex justify-between">
-                <span>Direct LAN Host:</span>
+                <span>Camera Host:</span>
                 <span className="text-brand-success font-mono">{getBaseHost()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Last Received:</span>
-                <span className="text-white/70">{lastFrameTime}</span>
               </div>
             </div>
           </div>
@@ -975,62 +971,60 @@ export default function LiveCameraFeed() {
       </div>
 
       {/* Bottom Controls Bar */}
-      <div className="p-2.5 bg-brand-secondary border-t border-brand-border flex flex-col gap-2 shrink-0">
+      <div className="p-3 bg-brand-secondary border-t border-brand-border flex flex-col gap-2.5 shrink-0">
         <div className="flex items-center gap-2">
           <input
             type="text"
             value={streamUrl}
             onChange={(e) => setStreamUrl(e.target.value)}
             placeholder="http://192.168.4.57:8080"
-            className="flex-1 bg-brand-bg border border-brand-border rounded px-2.5 py-1.5 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
+            className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
           />
           
           {isFeedActive ? (
             <button
               onClick={handleDisconnect}
-              className="px-3.5 py-1.5 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded text-xs font-semibold font-mono whitespace-nowrap flex items-center gap-1"
+              className="px-4 py-2 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors"
             >
-              <Square className="w-3 h-3 fill-current" />
+              <Square className="w-3.5 h-3.5 fill-current" />
               <span>Disconnect</span>
             </button>
           ) : (
             <button
               onClick={handleConnect}
-              className="px-3.5 py-1.5 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded text-xs font-semibold font-mono whitespace-nowrap shadow-sm flex items-center gap-1"
+              className="px-4 py-2 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded-lg text-xs font-semibold whitespace-nowrap shadow-sm flex items-center gap-1.5 transition-colors"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Connect Live Feed</span>
+              <span>Connect Feed</span>
             </button>
           )}
         </div>
 
         {/* Quick Optimization Buttons */}
-        <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-brand-secondaryText gap-2 px-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-brand-primaryText font-semibold flex items-center gap-1">
-              <Flame className="w-3 h-3 text-brand-warning" />
-              <span>LOW LATENCY PRESETS:</span>
+        <div className="flex flex-wrap items-center justify-between text-xs text-brand-secondaryText gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-brand-primaryText font-medium flex items-center gap-1">
+              <Flame className="w-3.5 h-3.5 text-brand-warning" />
+              <span>Latency Presets:</span>
             </span>
             <button
               onClick={() => setRemoteOptimization('640x480', 25)}
-              className="px-1.5 py-0.5 rounded bg-brand-bg border border-brand-success/50 text-brand-success hover:bg-brand-success hover:text-brand-bg transition-colors font-bold"
+              className="px-2.5 py-1 rounded-md bg-brand-bg border border-brand-success/50 text-brand-success hover:bg-brand-success hover:text-brand-bg transition-colors font-medium"
               title="Set camera to 640x480 for ultra-low latency"
             >
-              ⚡ 640x480 Turbo (Instant)
+              640×480 Turbo (Fastest)
             </button>
             <button
               onClick={() => setRemoteOptimization('800x480', 35)}
-              className="px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border hover:border-brand-accent hover:text-brand-accent transition-colors"
+              className="px-2.5 py-1 rounded-md bg-brand-bg border border-brand-border hover:border-brand-accent hover:text-brand-accent transition-colors"
             >
-              800x480 Balanced
+              800×480 Balanced
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-brand-success flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              <span>DIRECT LAN ACTIVE</span>
-            </span>
+          <div className="flex items-center gap-1.5 text-brand-success">
+            <Zap className="w-3.5 h-3.5" />
+            <span>Direct LAN Active</span>
           </div>
         </div>
       </div>

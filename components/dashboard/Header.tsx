@@ -55,65 +55,65 @@ export default function DashboardHeader({
             <button
               onClick={() => setHardwareMode(telemetry.hardwareMode === 'SIMULATOR' ? 'LIVE_HARDWARE' : 'SIMULATOR')}
               title="Click to toggle between Demo Simulator and Live ESP32 Hardware packets"
-              className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+              className={`text-xs font-sans px-2.5 py-1 rounded-lg border transition-colors flex items-center gap-1.5 ${
                 telemetry.hardwareMode === 'SIMULATOR'
-                  ? 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning font-semibold hover:bg-brand-warning/25'
-                  : 'bg-brand-success/15 border-brand-success/40 text-brand-success font-semibold hover:bg-brand-success/25'
+                  ? 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning font-medium hover:bg-brand-warning/25'
+                  : 'bg-brand-success/15 border-brand-success/40 text-brand-success font-medium hover:bg-brand-success/25'
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${telemetry.hardwareMode === 'SIMULATOR' ? 'bg-brand-warning' : 'bg-brand-success animate-pulse'}`}></span>
-              <span>{telemetry.hardwareMode === 'SIMULATOR' ? 'DEMO SIMULATOR' : 'LIVE HARDWARE'}</span>
+              <span>{telemetry.hardwareMode === 'SIMULATOR' ? 'Simulator Mode' : 'Live Hardware'}</span>
             </button>
           </div>
           <p className="text-xs text-brand-secondaryText hidden sm:block">{subtitle}</p>
         </div>
 
         {/* Mission ID & Timer Strip */}
-        <div className="hidden xl:flex items-center gap-3 pl-4 border-l border-brand-border font-mono text-xs">
+        <div className="hidden xl:flex items-center gap-3 pl-4 border-l border-brand-border text-xs">
           <div className="flex items-center gap-1.5 text-brand-secondaryText">
-            <span className="text-brand-accent font-semibold">{telemetry.mission.id}</span>
+            <span className="text-brand-accent font-mono font-medium">{telemetry.mission.id}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-brand-bg border border-brand-border text-brand-primaryText">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-bg border border-brand-border text-brand-primaryText">
             <Clock className="w-3.5 h-3.5 text-brand-accent" />
-            <span>{formatDuration(telemetry.mission.elapsedSeconds)}</span>
+            <span className="font-mono">{formatDuration(telemetry.mission.elapsedSeconds)}</span>
           </div>
         </div>
       </div>
 
       {/* Right Controls & Interlocks */}
-      <div className="flex items-center gap-3 font-mono text-xs">
+      <div className="flex items-center gap-3 text-xs">
         
         {/* Rover Latency */}
-        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded bg-brand-bg border border-brand-border">
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-brand-bg border border-brand-border">
           <span className={`w-2 h-2 rounded-full ${
             telemetry.rover.connectivity === 'ONLINE' ? 'bg-brand-success animate-pulse' : 'bg-brand-danger'
           }`}></span>
-          <span className="text-brand-secondaryText">ROVER:</span>
+          <span className="text-brand-secondaryText">Rover:</span>
           <span className={`${
             telemetry.rover.connectivity === 'ONLINE' ? 'text-brand-success' : 'text-brand-danger'
-          } font-semibold`}>
-            {telemetry.rover.connectivity} ({telemetry.rover.latencyMs}ms)
+          } font-medium`}>
+            {telemetry.rover.connectivity === 'ONLINE' ? 'Online' : 'Offline'} (<span className="font-mono">{telemetry.rover.latencyMs}ms</span>)
           </span>
         </div>
 
         {/* MQTT Status */}
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-brand-bg border border-brand-border">
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-bg border border-brand-border">
           <Radio className="w-3.5 h-3.5 text-brand-accent" />
           <span className="text-brand-secondaryText">MQTT:</span>
-          <span className="text-brand-accent font-semibold">100Hz</span>
+          <span className="text-brand-accent font-medium">Active</span>
         </div>
 
         {/* Supabase Status */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-brand-bg border border-brand-border">
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-bg border border-brand-border">
           <Database className="w-3.5 h-3.5 text-brand-success" />
-          <span className="text-brand-secondaryText">DB:</span>
-          <span className="text-brand-success font-semibold">REALTIME</span>
+          <span className="text-brand-secondaryText">Sync:</span>
+          <span className="text-brand-success font-medium">Realtime</span>
         </div>
 
         {/* Sound Alarm Mute / Unmute Toggle */}
         <button
           onClick={toggleSoundMute}
-          className={`p-2 rounded border transition-colors ${
+          className={`p-2 rounded-lg border transition-colors ${
             telemetry.soundMuted 
               ? 'bg-brand-bg border-brand-border text-brand-secondaryText hover:text-brand-primaryText' 
               : 'bg-brand-card border-brand-border text-brand-accent hover:border-brand-accent'
@@ -126,7 +126,7 @@ export default function DashboardHeader({
         {/* Alert Bell */}
         <Link 
           href="/dashboard/alerts"
-          className="relative p-2 rounded bg-brand-bg border border-brand-border text-brand-secondaryText hover:text-brand-primaryText transition-colors"
+          className="relative p-2 rounded-lg bg-brand-bg border border-brand-border text-brand-secondaryText hover:text-brand-primaryText transition-colors"
           title="Active Alerts"
         >
           <Bell className="w-4 h-4" />
@@ -139,19 +139,19 @@ export default function DashboardHeader({
         {telemetry.rover.eStopTriggered ? (
           <button
             onClick={resetEStop}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand-danger text-white border border-brand-danger font-bold text-xs hover:bg-red-600 transition-all shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-danger text-white border border-brand-danger font-semibold text-xs hover:bg-red-600 transition-all shadow-md animate-pulse"
           >
             <AlertOctagon className="w-4 h-4" />
-            <span>RESET E-STOP</span>
+            <span>Reset E-Stop</span>
           </button>
         ) : (
           <button
             onClick={triggerEStop}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 hover:border-brand-danger font-bold text-xs transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 hover:border-brand-danger font-semibold text-xs transition-all"
             title="Emergency Motor Kill (Spacebar or Click)"
           >
             <AlertOctagon className="w-4 h-4" />
-            <span className="hidden sm:inline">EMERGENCY STOP</span>
+            <span className="hidden sm:inline">Emergency Stop</span>
           </button>
         )}
 

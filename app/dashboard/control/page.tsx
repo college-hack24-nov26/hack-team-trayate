@@ -11,34 +11,34 @@ export default function RoverControlPage() {
     <div className="space-y-6">
       
       {/* Banner to switch to Unified One-Screen Start Mission */}
-      <div className="bg-brand-accent/10 border border-brand-accent/40 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="bg-brand-accent/10 border border-brand-accent/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded bg-brand-accent/20 border border-brand-accent/50 flex items-center justify-center text-brand-accent shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-brand-accent/20 border border-brand-accent/40 flex items-center justify-center text-brand-accent shrink-0">
             <Gamepad2 className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-sans font-bold text-sm text-brand-primaryText">
-              Unified Single-Screen Mission Cockpit Available
+            <h3 className="font-sans font-semibold text-sm text-brand-primaryText">
+              Start Mission Workstation
             </h3>
-            <p className="font-mono text-xs text-brand-secondaryText">
-              Control T-Rover with Arrow keys / WASD while viewing live IP Webcam, ultrasonic radar, and 2D mine map simultaneously on one screen.
+            <p className="text-xs text-brand-secondaryText">
+              Control T-Rover with WASD keys while monitoring live camera feeds and hardware sensors.
             </p>
           </div>
         </div>
 
         <Link
           href="/dashboard/mission"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg font-semibold text-xs font-mono transition-all whitespace-nowrap shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg font-semibold text-xs transition-all whitespace-nowrap shadow-sm"
         >
-          <span>LAUNCH UNIFIED MISSION COCKPIT</span>
+          <span>Open Mission Cockpit</span>
           <ArrowUpRight className="w-4 h-4" />
         </Link>
       </div>
 
-      <div className="border-b border-brand-border pb-4">
-        <h2 className="font-sans text-xl font-bold text-brand-primaryText">Rover Teleoperation & Physical Scanner Controls</h2>
-        <p className="font-mono text-xs text-brand-secondaryText mt-0.5">
-          BIDIRECTIONAL FLY-BY-WIRE // ESP32-01 SG90 SERVO SCANNER // ESP32-02 MOTOR INTERLOCK ACTIVE
+      <div className="border-b border-brand-border pb-3">
+        <h2 className="font-sans text-lg font-bold text-brand-primaryText">Rover Teleoperation & Physical Controls</h2>
+        <p className="text-xs text-brand-secondaryText mt-0.5">
+          Direct hardware control for ESP32-01 sensor suite and ESP32-02 motor module.
         </p>
       </div>
 

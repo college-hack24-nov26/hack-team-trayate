@@ -70,32 +70,32 @@ export default function DistanceMonitorCard() {
       
       {/* Top Header */}
       <div className="flex items-center justify-between pb-3 border-b border-brand-border">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent">
             <Ruler className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-sans font-bold text-sm text-brand-primaryText">
-              Ultrasonic Obstacle Proximity
+            <h3 className="font-sans font-semibold text-sm text-brand-primaryText">
+              Obstacle Proximity
             </h3>
-            <span className="font-mono text-[10px] text-brand-secondaryText">
-              HC-SR04 SCANNER TRANSDUCER
+            <span className="text-xs text-brand-secondaryText">
+              Ultrasonic Distance Sensor
             </span>
           </div>
         </div>
 
         {/* ESP32 Status Pill */}
-        <div className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border flex items-center gap-1.5 ${statusConfig.bg} ${statusConfig.border} ${statusConfig.color}`}>
+        <div className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${statusConfig.bg} ${statusConfig.border} ${statusConfig.color}`}>
           <StatusIcon className="w-3.5 h-3.5" />
-          <span>{distanceStatus}</span>
+          <span>{distanceStatus === 'NORMAL' ? 'Clear' : distanceStatus === 'WARNING' ? 'Warning' : distanceStatus === 'DANGER' ? 'Danger' : 'No Echo'}</span>
         </div>
       </div>
 
       {/* Main Distance Readout */}
       <div className="flex items-baseline justify-between pt-1">
         <div>
-          <span className="text-[10px] font-mono text-brand-secondaryText uppercase tracking-wider block">
-            MEASURED DISTANCE
+          <span className="text-xs text-brand-secondaryText font-medium block">
+            Measured Distance
           </span>
           <div className="flex items-baseline gap-2 mt-1">
             {isInitialLoading ? (
@@ -107,13 +107,13 @@ export default function DistanceMonitorCard() {
                 <span className={`text-4xl sm:text-5xl font-mono font-extrabold tracking-tight ${statusConfig.color}`}>
                   {distance.toFixed(1)}
                 </span>
-                <span className="text-sm font-mono text-brand-secondaryText font-semibold">
-                  CM
+                <span className="text-sm font-sans text-brand-secondaryText font-medium">
+                  cm
                 </span>
               </>
             ) : (
-              <span className="text-2xl font-mono text-brand-danger">
-                DISCONNECTED
+              <span className="text-2xl font-sans text-brand-danger font-semibold">
+                Disconnected
               </span>
             )}
           </div>
@@ -121,24 +121,24 @@ export default function DistanceMonitorCard() {
 
         {/* Status Callout */}
         <div className="text-right">
-          <span className="font-mono text-xs font-bold text-brand-primaryText">
+          <span className="text-xs font-semibold text-brand-primaryText">
             {distanceStatus}
           </span>
-          <div className="text-[10px] font-mono text-brand-secondaryText">
-            RANGE: 2 - 400 CM
+          <div className="text-xs text-brand-secondaryText font-mono">
+            Range: 2 - 400 cm
           </div>
         </div>
       </div>
 
       {/* Visual Proximity Progress Bar */}
-      <div className="space-y-1.5 font-mono text-xs">
-        <div className="flex justify-between text-[10px] text-brand-secondaryText">
-          <span className="text-brand-danger font-semibold">0 cm (COLLISION)</span>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex justify-between text-[11px] text-brand-secondaryText font-medium">
+          <span className="text-brand-danger">0 cm (Collision)</span>
           <span>150 cm</span>
-          <span className="text-brand-success font-semibold">300+ cm (CLEAR)</span>
+          <span className="text-brand-success">300+ cm (Clear)</span>
         </div>
 
-        <div className="w-full h-3 bg-brand-bg rounded-full overflow-hidden border border-brand-border p-0.5">
+        <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden border border-brand-border p-0.5">
           <div 
             className={`h-full rounded-full transition-all duration-300 ${statusConfig.barColor}`}
             style={{ width: `${progressPercent}%` }}
@@ -148,8 +148,8 @@ export default function DistanceMonitorCard() {
 
       {/* Mini Trend Sparkline */}
       {trendValues.length > 2 && (
-        <div className="pt-2 border-t border-brand-border flex items-center justify-between font-mono text-[10px] text-brand-secondaryText">
-          <span>RECENT ECHO TREND (15s):</span>
+        <div className="pt-2 border-t border-brand-border flex items-center justify-between text-xs text-brand-secondaryText">
+          <span>Recent Echo Trend:</span>
           <div className="flex items-end gap-1 h-5">
             {trendValues.map((v, i) => {
               const heightPct = Math.min(100, Math.max(15, (v / maxRangeCm) * 100));
@@ -167,10 +167,10 @@ export default function DistanceMonitorCard() {
       )}
 
       {/* Footer Info */}
-      <div className="text-[10px] font-mono text-brand-secondaryText/80 flex items-center justify-between pt-1 border-t border-brand-border">
-        <span>POLL INTERVAL: 1000ms</span>
-        <span className="text-brand-accent">
-          {esp32_01_connected ? 'LIVE HARDWARE SYNC' : 'AWAITING ESP32-01'}
+      <div className="text-xs text-brand-secondaryText flex items-center justify-between pt-2 border-t border-brand-border">
+        <span>Refresh: 1000ms</span>
+        <span className="text-brand-accent font-medium">
+          {esp32_01_connected ? 'Live Hardware Sync' : 'Awaiting ESP32-01'}
         </span>
       </div>
 

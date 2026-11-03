@@ -71,20 +71,20 @@ export default function ServoScannerControl() {
             <Radar className={`w-4 h-4 ${isPending ? 'animate-spin' : ''}`} />
           </div>
           <div>
-            <h3 className="font-sans font-bold text-sm text-brand-primaryText flex items-center gap-2">
-              <span>Ultrasonic Servo Scanner Control</span>
+            <h3 className="font-sans font-semibold text-sm text-brand-primaryText flex items-center gap-2">
+              <span>Servo Scanner Pan</span>
               {isEspConnected ? (
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-brand-success/15 border border-brand-success/40 text-brand-success font-semibold">
-                  HARDWARE ONLINE
+                <span className="text-xs px-2 py-0.5 rounded-full bg-brand-success/15 border border-brand-success/40 text-brand-success font-medium">
+                  Hardware Online
                 </span>
               ) : (
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-brand-danger/15 border border-brand-danger/40 text-brand-danger font-semibold">
-                  ESP32 OFFLINE
+                <span className="text-xs px-2 py-0.5 rounded-full bg-brand-danger/15 border border-brand-danger/40 text-brand-danger font-medium">
+                  Offline
                 </span>
               )}
             </h3>
-            <p className="font-mono text-[10px] text-brand-secondaryText">
-              ENDPOINT: <code className="text-brand-accent">GET /api/servo?angle=&lt;0-180&gt;</code>
+            <p className="text-xs text-brand-secondaryText">
+              SG90 Pan Mechanism
             </p>
           </div>
         </div>
@@ -93,11 +93,11 @@ export default function ServoScannerControl() {
         <button
           onClick={() => handleAngleChange(90)}
           disabled={isPending || !isEspConnected}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-secondary hover:bg-brand-border border border-brand-border text-brand-primaryText font-mono text-xs font-semibold transition-all disabled:opacity-40"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-secondary hover:bg-brand-border border border-brand-border text-brand-primaryText text-xs font-medium transition-all disabled:opacity-40"
           title="Center Servo Scanner to 90° Forward"
         >
           <RotateCcw className="w-3.5 h-3.5 text-brand-accent" />
-          <span>CENTER (90°)</span>
+          <span>Center (90°)</span>
         </button>
       </div>
 
@@ -132,20 +132,20 @@ export default function ServoScannerControl() {
         </div>
 
         {/* Angle Readout */}
-        <div className="text-center mt-3 font-mono">
-          <div className="text-2xl font-extrabold text-brand-primaryText">
+        <div className="text-center mt-3">
+          <div className="text-2xl font-mono font-extrabold text-brand-primaryText">
             {currentAngle}°
           </div>
-          <span className="text-[10px] text-brand-secondaryText uppercase tracking-wider">
-            {currentAngle < 75 ? 'PORT (LEFT CRAWL)' : currentAngle > 105 ? 'STARBOARD (RIGHT CRAWL)' : 'FORWARD BEARING'}
+          <span className="text-xs text-brand-secondaryText font-medium">
+            {currentAngle < 75 ? 'Left (Port)' : currentAngle > 105 ? 'Right (Starboard)' : 'Straight Ahead'}
           </span>
         </div>
       </div>
 
       {/* Preset Quick-Buttons (0°, 45°, 90°, 135°, 180°) */}
       <div className="space-y-2">
-        <span className="font-mono text-[10px] text-brand-secondaryText uppercase tracking-wider">
-          PRESET ANGLES:
+        <span className="text-xs text-brand-secondaryText font-medium">
+          Preset Angles:
         </span>
         <div className="grid grid-cols-5 gap-2 font-mono text-xs">
           {presetAngles.map((deg) => {
@@ -169,14 +169,14 @@ export default function ServoScannerControl() {
       </div>
 
       {/* Interactive Angle Slider */}
-      <div className="space-y-2 font-mono text-xs">
-        <div className="flex justify-between items-center text-brand-secondaryText text-[11px]">
-          <span>SLIDER ADJUSTMENT:</span>
-          <span className="text-brand-accent font-bold">{sliderAngle}°</span>
+      <div className="space-y-2 text-xs">
+        <div className="flex justify-between items-center text-brand-secondaryText font-medium">
+          <span>Manual Angle Adjustment</span>
+          <span className="text-brand-accent font-mono font-bold">{sliderAngle}°</span>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-brand-secondaryText">0°</span>
+          <span className="text-xs text-brand-secondaryText font-mono">0°</span>
           <input
             type="range"
             min="0"
@@ -189,16 +189,16 @@ export default function ServoScannerControl() {
             disabled={isPending || !isEspConnected}
             className="flex-1 h-2 bg-brand-bg rounded-lg appearance-none cursor-pointer accent-brand-accent disabled:opacity-40"
           />
-          <span className="text-[10px] text-brand-secondaryText">180°</span>
+          <span className="text-xs text-brand-secondaryText font-mono">180°</span>
         </div>
       </div>
 
       {/* Feedback & Confirmation Strip */}
       {feedback.message && (
-        <div className={`p-2.5 rounded-lg border text-xs font-mono flex items-center gap-2 ${
+        <div className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
           feedback.type === 'success'
-            ? 'bg-brand-success/10 border-brand-success/30 text-brand-success'
-            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+            ? 'bg-brand-success/10 border-brand-success/30 text-brand-success font-medium'
+            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger font-medium'
         }`}>
           {feedback.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -210,12 +210,12 @@ export default function ServoScannerControl() {
       )}
 
       {/* Hardware Safety Verification Note */}
-      <div className="pt-2 border-t border-brand-border text-[10px] font-mono text-brand-secondaryText/80 flex items-center justify-between">
+      <div className="pt-2 border-t border-brand-border text-xs text-brand-secondaryText flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-brand-success" />
-          <span>CLOSED-LOOP VERIFICATION ACTIVE</span>
+          <span>Feedback Verification Active</span>
         </span>
-        <span>ESP32-01 SG90 PWM</span>
+        <span className="font-mono text-[11px]">ESP32-01 SG90</span>
       </div>
 
     </div>
