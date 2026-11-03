@@ -132,7 +132,7 @@ export default function LandingPage() {
 
             </div>
 
-            {/* Right Column: 3D-Style Industrial Render of Six-Wheeled Rover */}
+            {/* Right Column: 3D-Style Industrial Render of 4WD Rover */}
             <div className="lg:col-span-6 relative">
               <div className="relative rounded-xl bg-brand-card/90 border border-brand-border p-2 sm:p-3 shadow-2xl overflow-hidden group">
                 
@@ -147,7 +147,7 @@ export default function LandingPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-brand-accent font-semibold">UNIT // T-ROVER 01</span>
                     <span className="text-brand-border">|</span>
-                    <span className="hidden sm:inline">6-WHEEL DRIVE ACTIVE</span>
+                    <span className="hidden sm:inline">4-WHEEL DRIVE (4WD) ACTIVE</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-brand-success animate-pulse"></span>
@@ -159,7 +159,7 @@ export default function LandingPage() {
                 <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full overflow-hidden rounded-lg border border-brand-border bg-[#05080E]">
                   <Image
                     src="/assets/t-rover.png"
-                    alt="T-Rover: Six-Wheeled Industrial Mine Rescue Rover Prototype"
+                    alt="T-Rover: 4WD Industrial Mine Rescue Rover Prototype"
                     fill
                     className="object-cover object-center filter contrast-105 group-hover:scale-[1.02] transition-transform duration-700 ease-out"
                     priority
@@ -413,7 +413,7 @@ export default function LandingPage() {
                 <div className="relative rounded-lg overflow-hidden aspect-[16/10] bg-[#05080E] border border-brand-border">
                   <Image
                     src="/assets/t-rover.png"
-                    alt="T-Rover Six-Wheeled Rescue Platform"
+                    alt="T-Rover 4WD Rescue Platform"
                     fill
                     className="object-cover object-center"
                   />
@@ -447,7 +447,7 @@ export default function LandingPage() {
               
               <div className="p-4 rounded-lg bg-brand-card border border-brand-border">
                 <div className="flex items-center justify-between mb-1">
-                  <h4 className="font-semibold text-brand-primaryText text-sm sm:text-base">6-Wheel Industrial Mobility</h4>
+                  <h4 className="font-semibold text-brand-primaryText text-sm sm:text-base">4WD Industrial Mobility</h4>
                   <span className="font-mono text-[10px] text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">350mm Clearance</span>
                 </div>
                 <p className="text-xs text-brand-secondaryText leading-relaxed">

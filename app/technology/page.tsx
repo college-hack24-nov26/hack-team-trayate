@@ -142,7 +142,7 @@ export default function TechnologyPage() {
                 <span className="text-xs font-mono text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">PRIMARY BUS</span>
               </div>
               <p className="text-xs text-brand-secondaryText leading-relaxed mb-4">
-                Executes 6-wheel brushless hub motor velocity PID loops, receives remote steering commands via Sub-1GHz RF, and drives the hardware-isolated Emergency STOP relay.
+                Executes 4-wheel brushless hub motor velocity PID loops (4WD), receives remote steering commands via Sub-1GHz RF, and drives the hardware-isolated Emergency STOP relay.
               </p>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-brand-secondaryText pt-3 border-t border-brand-border/60">
                 <div>CLOCK: 240 MHz</div>

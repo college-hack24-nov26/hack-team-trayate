@@ -19,7 +19,7 @@ export const initialDevices: ESP32Device[] = [
   {
     id: 'ESP32-01',
     name: 'Main Rover Controller (Mobility & Safety)',
-    role: 'Locomotion, 6-Wheel PID, E-Stop Interlock & Sub-1GHz Mesh',
+    role: 'Locomotion, 4-Wheel Drive PID, E-Stop Interlock & Sub-1GHz Mesh',
     status: 'ONLINE',
     ipAddress: '192.168.4.101',
     macAddress: '24:0A:C4:58:1A:01',
@@ -30,7 +30,7 @@ export const initialDevices: ESP32Device[] = [
     cpuLoadPercent: 18,
     freeHeapKb: 184,
     voltage: 3.32,
-    subsystems: ['6x Hub Inverters', 'Hardware E-Stop Relay', 'IMU 6-DOF', 'Sub-1GHz RF'],
+    subsystems: ['4x Hub Inverters', 'Hardware E-Stop Relay', 'IMU 6-DOF', 'Sub-1GHz RF'],
   },
   {
     id: 'ESP32-02',

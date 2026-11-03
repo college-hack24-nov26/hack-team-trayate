@@ -244,9 +244,9 @@ export default function MissionMineMap() {
     ctx.fillRect(-12, -8, 24, 16);
     ctx.strokeRect(-12, -8, 24, 16);
 
-    // 6 Wheels (3 per side)
+    // 4 Wheels (4WD - 2 per side)
     ctx.fillStyle = '#0EA5E9';
-    [-8, 0, 8].forEach((wx) => {
+    [-8, 8].forEach((wx) => {
       ctx.fillRect(wx - 2, -11, 4, 3);
       ctx.fillRect(wx - 2, 8, 4, 3);
     });

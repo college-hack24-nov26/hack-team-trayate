@@ -402,7 +402,7 @@ export async function checkHardwareClusterHealth(): Promise<DeviceHealth[]> {
   const motorHealth: DeviceHealth = {
     id: 'ESP32-02',
     name: 'Rover Motor Controller',
-    role: '6-Wheel Locomotion, PWM Speed Governor, Hardware E-Stop Interlock',
+    role: '4WD Locomotion, PWM Speed Governor, Hardware E-Stop Interlock',
     url: config.motorUrl || 'http://192.168.137.221',
     isConfigured: Boolean(config.motorUrl),
     status: 'OFFLINE',

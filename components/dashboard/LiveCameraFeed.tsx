@@ -50,7 +50,21 @@ const HUMAN_COLORS = [
   '#EC4899', // Pink (Target 5)
 ];
 
-export default function LiveCameraFeed() {
+export interface LiveCameraFeedProps {
+  className?: string;
+  activeFilter?: 'optical' | 'thermal' | 'split';
+  onFilterChange?: (filter: 'optical' | 'thermal' | 'split') => void;
+  title?: string;
+  showFilterControls?: boolean;
+}
+
+export default function LiveCameraFeed({
+  className = '',
+  activeFilter: externalFilter,
+  onFilterChange,
+  title = 'Live Optical Feed',
+  showFilterControls = false,
+}: LiveCameraFeedProps = {}) {
   const { telemetry, setCameraUrl, setCameraStatus, setHumanDetection, toggleHumanDetection } = useTelemetry();
 
   const [streamUrl, setStreamUrl] = useState(() => {
@@ -59,6 +73,15 @@ export default function LiveCameraFeed() {
     }
     return telemetry.camera.url || 'http://192.168.4.57:8080';
   });
+
+  // Filter mode: 'optical' | 'thermal' | 'split'
+  const [internalFilter, setInternalFilter] = useState<'optical' | 'thermal' | 'split'>('optical');
+  const currentFilter = externalFilter !== undefined ? externalFilter : internalFilter;
+
+  const handleFilterSelect = (mode: 'optical' | 'thermal' | 'split') => {
+    setInternalFilter(mode);
+    onFilterChange?.(mode);
+  };
 
   // Renderer mode: 'canvas_fast' (zero-lag canvas loop) vs 'native_mjpeg' (/video)
   const [renderMode, setRenderMode] = useState<'canvas_fast' | 'native_mjpeg'>('canvas_fast');
@@ -98,6 +121,7 @@ export default function LiveCameraFeed() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const thermalCanvasRef = useRef<HTMLCanvasElement>(null);
   const mjpegImgRef = useRef<HTMLImageElement>(null);
 
   // Extract base host from URL (e.g., http://192.168.4.57:8080)
@@ -500,6 +524,20 @@ export default function LiveCameraFeed() {
 
                 // Render current tracked humans immediately with zero frame stall
                 drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
+
+                // In split mode, mirror frame into thermal canvas
+                if (thermalCanvasRef.current) {
+                  const tCanvas = thermalCanvasRef.current;
+                  if (tCanvas.width !== canvas.width || tCanvas.height !== canvas.height) {
+                    tCanvas.width = canvas.width;
+                    tCanvas.height = canvas.height;
+                  }
+                  const tCtx = tCanvas.getContext('2d');
+                  if (tCtx) {
+                    tCtx.drawImage(canvas, 0, 0);
+                  }
+                }
+
                 bitmap.close();
               } else {
                 const objUrl = URL.createObjectURL(blob);
@@ -512,6 +550,19 @@ export default function LiveCameraFeed() {
                     }
                     ctx.drawImage(img, 0, 0);
                     drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
+
+                    if (thermalCanvasRef.current) {
+                      const tCanvas = thermalCanvasRef.current;
+                      if (tCanvas.width !== canvas.width || tCanvas.height !== canvas.height) {
+                        tCanvas.width = canvas.width;
+                        tCanvas.height = canvas.height;
+                      }
+                      const tCtx = tCanvas.getContext('2d');
+                      if (tCtx) {
+                        tCtx.drawImage(canvas, 0, 0);
+                      }
+                    }
+
                     URL.revokeObjectURL(objUrl);
                     resolve(null);
                   };
@@ -625,7 +676,7 @@ export default function LiveCameraFeed() {
       ref={containerRef}
       className={`bg-brand-card border border-brand-border rounded-xl flex flex-col overflow-hidden relative ${
         isFullscreen ? 'w-screen h-screen rounded-none' : 'h-full'
-      }`}
+      } ${className}`}
     >
       {/* Top Header */}
       <div className="h-12 px-4 bg-brand-secondary border-b border-brand-border flex items-center justify-between shrink-0">
@@ -634,7 +685,7 @@ export default function LiveCameraFeed() {
             <Camera className="w-4 h-4" />
           </div>
           <span className="font-sans font-semibold text-brand-primaryText text-sm">
-            Live Optical Feed
+            {title}
           </span>
           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
             telemetry.camera.status === 'CONNECTED'
@@ -717,6 +768,42 @@ export default function LiveCameraFeed() {
             </button>
           </div>
 
+          {/* Optional Filter Controls (Optical / Thermal / Split) */}
+          {showFilterControls && (
+            <div className="hidden sm:flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
+              <button
+                onClick={() => handleFilterSelect('optical')}
+                className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  currentFilter === 'optical'
+                    ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                    : 'text-brand-secondaryText hover:text-brand-primaryText'
+                }`}
+              >
+                Optical
+              </button>
+              <button
+                onClick={() => handleFilterSelect('thermal')}
+                className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  currentFilter === 'thermal'
+                    ? 'bg-brand-danger text-white font-semibold shadow-xs'
+                    : 'text-brand-secondaryText hover:text-brand-primaryText'
+                }`}
+              >
+                Thermal
+              </button>
+              <button
+                onClick={() => handleFilterSelect('split')}
+                className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  currentFilter === 'split'
+                    ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                    : 'text-brand-secondaryText hover:text-brand-primaryText'
+                }`}
+              >
+                Split
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => setShowDiagnostics(!showDiagnostics)}
             className={`p-2 rounded-lg hover:bg-brand-bg transition-colors ${
@@ -738,35 +825,74 @@ export default function LiveCameraFeed() {
       </div>
 
       {/* Main Video Viewport */}
-      <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[220px]">
+      <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[260px]">
         {isFeedActive ? (
           <div className="relative w-full h-full flex items-center justify-center">
-            
-            {/* 1. ZERO-LAG CANVAS ENGINE WITH HUMAN DETECTION */}
-            {renderMode === 'canvas_fast' && (
-              <canvas
-                ref={canvasRef}
-                className="w-full h-full object-contain block"
-              />
-            )}
+            {currentFilter === 'split' ? (
+              /* DUAL SPLIT VIEWPORT (OPTICAL + FLIR THERMAL) */
+              <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-2 p-2">
+                <div className="relative rounded-lg overflow-hidden border border-brand-border bg-black flex items-center justify-center min-h-[200px]">
+                  {renderMode === 'canvas_fast' ? (
+                    <canvas ref={canvasRef} className="w-full h-full object-contain block" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={effectiveMjpegUrl} alt="HD Optical Feed" className="w-full h-full object-contain" />
+                  )}
+                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono text-brand-accent border border-brand-accent/30 pointer-events-none z-10">
+                    HD OPTICAL (1080p RGB)
+                  </div>
+                </div>
 
-            {/* 2. NATIVE MJPEG STREAM ENGINE */}
-            {renderMode === 'native_mjpeg' && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                ref={mjpegImgRef}
-                src={effectiveMjpegUrl}
-                alt="Native Rover MJPEG Feed"
-                className="w-full h-full object-contain"
-                onLoad={() => {
-                  setCameraStatus('CONNECTED');
-                  setConnectionError(null);
-                }}
-                onError={() => {
-                  setCameraStatus('ERROR');
-                  setConnectionError('MJPEG stream stalled. Switching to ZERO-LAG PIPELINE recommended.');
-                }}
-              />
+                <div className="relative rounded-lg overflow-hidden border border-brand-border bg-black flex items-center justify-center min-h-[200px]">
+                  {renderMode === 'canvas_fast' ? (
+                    <canvas ref={thermalCanvasRef} className="w-full h-full object-contain block filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={effectiveMjpegUrl} alt="Thermal Simulation Feed" className="w-full h-full object-contain filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200" />
+                  )}
+                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono text-brand-danger border border-brand-danger/30 pointer-events-none z-10">
+                    FLIR THERMAL LWIR 32x24
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* SINGLE VIEWPORT (OPTICAL OR THERMAL) */
+              <div className="relative w-full h-full flex items-center justify-center">
+                {renderMode === 'canvas_fast' && (
+                  <canvas
+                    ref={canvasRef}
+                    className={`w-full h-full object-contain block transition-all duration-300 ${
+                      currentFilter === 'thermal' ? 'filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200' : ''
+                    }`}
+                  />
+                )}
+
+                {renderMode === 'native_mjpeg' && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    ref={mjpegImgRef}
+                    src={effectiveMjpegUrl}
+                    alt="Rover Video Feed"
+                    className={`w-full h-full object-contain transition-all duration-300 ${
+                      currentFilter === 'thermal' ? 'filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200' : ''
+                    }`}
+                    onLoad={() => {
+                      setCameraStatus('CONNECTED');
+                      setConnectionError(null);
+                    }}
+                    onError={() => {
+                      setCameraStatus('ERROR');
+                      setConnectionError('MJPEG stream stalled. Switching to ZERO-LAG PIPELINE recommended.');
+                    }}
+                  />
+                )}
+
+                {currentFilter === 'thermal' && (
+                  <div className="absolute top-3 left-3 bg-brand-danger/90 backdrop-blur-sm px-2.5 py-1 rounded text-xs font-mono text-white border border-brand-danger/40 pointer-events-none z-20">
+                    FLIR THERMAL LWIR 32x24 HEATMAP
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Connecting Spinner Overlay */}

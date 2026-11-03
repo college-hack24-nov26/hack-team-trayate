@@ -47,11 +47,9 @@ export default function JoystickControl() {
 
   const motorStatuses = [
     { id: 'M1 Front-Left', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 34.2, status: 'NOMINAL' },
-    { id: 'M2 Mid-Left', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 35.0, status: 'NOMINAL' },
-    { id: 'M3 Rear-Left', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 33.8, status: 'NOMINAL' },
-    { id: 'M4 Front-Right', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 34.5, status: 'NOMINAL' },
-    { id: 'M5 Mid-Right', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 35.1, status: 'NOMINAL' },
-    { id: 'M6 Rear-Right', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 34.0, status: 'NOMINAL' },
+    { id: 'M2 Rear-Left', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 33.8, status: 'NOMINAL' },
+    { id: 'M3 Front-Right', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 34.5, status: 'NOMINAL' },
+    { id: 'M4 Rear-Right', rpm: currentMovement !== 'STOP' ? 140 : 0, temp: 34.0, status: 'NOMINAL' },
   ];
 
   return (
@@ -229,10 +227,10 @@ export default function JoystickControl() {
 
         </div>
 
-        {/* Right: Motor Telemetry Diagnostics (All 6 Motors) */}
+        {/* Right: Motor Telemetry Diagnostics (All 4 Motors - 4WD) */}
         <div className="lg:col-span-5 bg-brand-card border border-brand-border rounded-xl p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-brand-border pb-3">
-            <h3 className="font-sans text-base font-bold text-brand-primaryText">6-Wheel Inverter Telemetry</h3>
+            <h3 className="font-sans text-base font-bold text-brand-primaryText">4WD Inverter Telemetry</h3>
             <span className="font-mono text-xs text-brand-success">ALL NOMINAL</span>
           </div>
 

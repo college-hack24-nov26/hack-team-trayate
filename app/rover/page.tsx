@@ -20,7 +20,7 @@ import {
 
 export default function RoverProductPage() {
   const specs = [
-    { label: 'Mobility Architecture', value: '6-Wheel Independent Planetary Hub Drive' },
+    { label: 'Mobility Architecture', value: '4-Wheel Independent Planetary Drive (4WD)' },
     { label: 'Ground Clearance', value: '350 mm Obstacle Scaling' },
     { label: 'Max Incline Traversal', value: '45° Slope over Rubble & Coal Seams' },
     { label: 'Chassis Material', value: 'Matte Titanium Alloy & Reinforced Carbon Composite' },
@@ -55,7 +55,7 @@ export default function RoverProductPage() {
                 T-Rover Industrial Mine Rescue Robot
               </h1>
               <p className="text-brand-secondaryText text-base sm:text-lg leading-relaxed">
-                Engineered from the ground up for extreme durability in underground mining hazards. Equipped with six-wheel independent all-terrain drive, multi-gas sniffer array, and automated dust mitigation.
+                Engineered from the ground up for extreme durability in underground mining hazards. Equipped with four-wheel independent 4WD all-terrain drive, multi-gas sniffer array, and automated dust mitigation.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-2">
                 <Link
@@ -79,7 +79,7 @@ export default function RoverProductPage() {
                 <div className="relative aspect-[16/10] w-full rounded-lg overflow-hidden border border-brand-border bg-[#05080E]">
                   <Image
                     src="/assets/t-rover.png"
-                    alt="T-Rover Six-Wheeled Rover"
+                    alt="T-Rover 4WD Autonomous Mining Rover"
                     fill
                     className="object-cover object-center"
                     priority
@@ -112,9 +112,9 @@ export default function RoverProductPage() {
             <div className="w-10 h-10 rounded-lg bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent">
               <Compass className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-brand-primaryText">Six-Wheel Mobility System</h3>
+            <h3 className="text-lg font-bold text-brand-primaryText">4-Wheel Drive Mobility System</h3>
             <p className="text-xs text-brand-secondaryText leading-relaxed">
-              Six brushless in-wheel planetary motors deliver independent torque distribution across all contact patches, withstanding 350mm step climbs and submerged coal slurry without stall.
+              Four high-torque in-wheel planetary motors deliver independent 4WD traction control across all contact patches, withstanding 350mm step climbs and submerged coal slurry without stall.
             </p>
           </div>
 
