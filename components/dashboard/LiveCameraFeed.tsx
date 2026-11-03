@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { soundManager } from '@/lib/soundAlerts';
+import { logHumanDetectionToSupabase } from '@/lib/supabaseClient';
 
 interface DetectedHuman {
   bbox: [number, number, number, number]; // [x, y, width, height]
@@ -230,6 +231,16 @@ export default function LiveCameraFeed() {
       isAcknowledgedRef.current = false;
       setIsAlertAcknowledged(false);
       soundManager.playWarningAlert();
+
+      // Automatically store human detection event in Supabase cloud backend
+      logHumanDetectionToSupabase({
+        count,
+        confidence: highestConfidence,
+        nearest_distance: nearestDist,
+        message: count > 1 
+          ? `Multiple survivors detected (${count} individuals)` 
+          : `Human detected in active mission sector`,
+      }).catch(() => {});
     }
   }, [setHumanDetection]);
 

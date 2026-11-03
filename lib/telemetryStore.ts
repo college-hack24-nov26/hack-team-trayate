@@ -10,6 +10,7 @@ import {
   getHardwareConfig,
   ESP32SensorResponse 
 } from './esp32Service';
+import { logTelemetryToSupabase, isSupabaseConfigured } from './supabaseClient';
 
 export interface SensorData {
   value: number;
@@ -310,6 +311,7 @@ export function useTelemetry() {
   const [telemetry, setTelemetry] = useState<TelemetryState>(initialTelemetry);
   const deadmanTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  const lastSupabaseSyncRef = useRef<number>(0);
 
   // 1. Mission Clock (ticks every 1s)
   useEffect(() => {
@@ -396,10 +398,25 @@ export function useTelemetry() {
             connections: {
               ...prev.connections,
               isDemo: false,
+              supabase: isSupabaseConfigured(),
               lastPing: `${latency}ms`,
             },
           };
         });
+
+        // Periodic Cloud Telemetry Sync to Supabase (every 3 seconds)
+        if (Date.now() - lastSupabaseSyncRef.current >= 3000) {
+          lastSupabaseSyncRef.current = Date.now();
+          logTelemetryToSupabase({
+            distance: liveData.distance,
+            distance_status: liveData.status,
+            servo_angle: liveData.angle,
+            mq4_raw: liveData.mq4_raw,
+            mq135_raw: liveData.mq135_raw,
+            temperature: liveData.temperature,
+            humidity: liveData.humidity,
+          }).catch(() => {});
+        }
       } catch (err: unknown) {
         // Handle polling error
         const errorMsg = err instanceof Error ? err.message : 'ESP32 sensor timeout';

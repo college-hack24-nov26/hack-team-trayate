@@ -105,9 +105,11 @@ export default function DashboardHeader({
 
         {/* Supabase Status */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-bg border border-brand-border">
-          <Database className="w-3.5 h-3.5 text-brand-success" />
-          <span className="text-brand-secondaryText">Sync:</span>
-          <span className="text-brand-success font-medium">Realtime</span>
+          <Database className={`w-3.5 h-3.5 ${telemetry.connections.supabase ? 'text-brand-success' : 'text-brand-secondaryText'}`} />
+          <span className="text-brand-secondaryText">Cloud:</span>
+          <span className={`${telemetry.connections.supabase ? 'text-brand-success font-medium' : 'text-brand-secondaryText'}`}>
+            {telemetry.connections.supabase ? 'Supabase Sync' : 'Local Only'}
+          </span>
         </div>
 
         {/* Sound Alarm Mute / Unmute Toggle */}
