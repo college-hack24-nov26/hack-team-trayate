@@ -1,8 +1,10 @@
 'use client';
 
 import JoystickControl from '@/components/dashboard/JoystickControl';
+import ServoScannerControl from '@/components/dashboard/ServoScannerControl';
+import DistanceMonitorCard from '@/components/dashboard/DistanceMonitorCard';
 import Link from 'next/link';
-import { Gamepad2, ArrowUpRight } from 'lucide-react';
+import { Gamepad2, ArrowUpRight, Radar } from 'lucide-react';
 
 export default function RoverControlPage() {
   return (
@@ -19,7 +21,7 @@ export default function RoverControlPage() {
               Unified Single-Screen Mission Cockpit Available
             </h3>
             <p className="font-mono text-xs text-brand-secondaryText">
-              Control T-Rover with W-A-S-D keyboard while viewing live IP Webcam and 2D mine map simultaneously on one screen.
+              Control T-Rover with Arrow keys / WASD while viewing live IP Webcam, ultrasonic radar, and 2D mine map simultaneously on one screen.
             </p>
           </div>
         </div>
@@ -34,12 +36,19 @@ export default function RoverControlPage() {
       </div>
 
       <div className="border-b border-brand-border pb-4">
-        <h2 className="font-sans text-xl font-bold text-brand-primaryText">Rover Teleoperation & Motor Diagnostics</h2>
+        <h2 className="font-sans text-xl font-bold text-brand-primaryText">Rover Teleoperation & Physical Scanner Controls</h2>
         <p className="font-mono text-xs text-brand-secondaryText mt-0.5">
-          BIDIRECTIONAL FLY-BY-WIRE // ESP32-01 LOCOMOTION CONTROLLER // FAIL-SAFE INTERLOCK ACTIVE
+          BIDIRECTIONAL FLY-BY-WIRE // ESP32-01 SG90 SERVO SCANNER // ESP32-02 MOTOR INTERLOCK ACTIVE
         </p>
       </div>
 
+      {/* Top 2 Physical Hardware Cards: Servo Scanner & Ultrasonic Distance */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DistanceMonitorCard />
+        <ServoScannerControl />
+      </div>
+
+      {/* Primary Rover Directional Drive Diagnostics */}
       <JoystickControl />
     </div>
   );

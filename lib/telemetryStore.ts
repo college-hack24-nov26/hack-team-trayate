@@ -2,6 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { soundManager } from './soundAlerts';
+import { 
+  fetchLiveSensorData, 
+  sendServoAngleCommand, 
+  sendMotorMovement, 
+  triggerHardwareEmergencyStop,
+  getHardwareConfig,
+  ESP32SensorResponse 
+} from './esp32Service';
 
 export interface SensorData {
   value: number;
@@ -14,6 +22,30 @@ export interface SensorData {
   label: string;
 }
 
+export interface PhysicalHardwareTelemetry {
+  esp32_01_connected: boolean;
+  distance: number | null;
+  distanceStatus: 'NORMAL' | 'WARNING' | 'DANGER' | 'NO_ECHO';
+  mq4_raw: number | null;
+  mq135_raw: number | null;
+  temperature: number | null;
+  humidity: number | null;
+  servoAngle: number;
+  lastUpdated: string | null;
+  latencyMs: number;
+  consecutiveFailures: number;
+  pollError: string | null;
+  isInitialLoading: boolean;
+  history: Array<{
+    time: string;
+    distance: number | null;
+    mq4_raw: number | null;
+    mq135_raw: number | null;
+    temperature: number | null;
+    humidity: number | null;
+  }>;
+}
+
 export interface TelemetryState {
   mission: {
     id: string;
@@ -23,6 +55,7 @@ export interface TelemetryState {
     elapsedSeconds: number;
   };
   hardwareMode: 'SIMULATOR' | 'LIVE_HARDWARE';
+  physicalHardware: PhysicalHardwareTelemetry;
   camera: {
     url: string;
     status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
@@ -92,7 +125,23 @@ const initialTelemetry: TelemetryState = {
     startTime: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
     elapsedSeconds: 2540,
   },
-  hardwareMode: 'SIMULATOR',
+  hardwareMode: 'LIVE_HARDWARE', // Default to live physical hardware!
+  physicalHardware: {
+    esp32_01_connected: false,
+    distance: null,
+    distanceStatus: 'NORMAL',
+    mq4_raw: null,
+    mq135_raw: null,
+    temperature: null,
+    humidity: null,
+    servoAngle: 90,
+    lastUpdated: null,
+    latencyMs: 0,
+    consecutiveFailures: 0,
+    pollError: null,
+    isInitialLoading: true,
+    history: [],
+  },
   camera: {
     url: 'http://192.168.1.100:8080/video',
     status: 'DISCONNECTED',
@@ -103,24 +152,24 @@ const initialTelemetry: TelemetryState = {
     lastPing: 'Awaiting feed',
   },
   ch4: {
-    label: 'Methane (CH4)',
-    value: 0.12,
-    unit: '% VOL',
+    label: 'Methane (MQ-4 RAW ADC)',
+    value: 0,
+    unit: 'RAW ADC',
     status: 'safe',
-    trend: [0.10, 0.11, 0.12, 0.13, 0.12, 0.11, 0.12],
-    lastUpdated: 'Just now',
+    trend: [],
+    lastUpdated: 'Connecting...',
     minSafe: 0,
-    maxSafe: 1.0,
+    maxSafe: 1200,
   },
   co: {
-    label: 'Carbon Monoxide (CO)',
-    value: 8,
-    unit: 'PPM',
+    label: 'Air Quality (MQ-135 RAW ADC)',
+    value: 0,
+    unit: 'RAW ADC',
     status: 'safe',
-    trend: [6, 7, 7, 8, 9, 8, 8],
-    lastUpdated: 'Just now',
+    trend: [],
+    lastUpdated: 'Connecting...',
     minSafe: 0,
-    maxSafe: 25,
+    maxSafe: 1200,
   },
   co2: {
     label: 'Carbon Dioxide (CO2)',
@@ -128,7 +177,7 @@ const initialTelemetry: TelemetryState = {
     unit: 'PPM',
     status: 'safe',
     trend: [580, 595, 610, 630, 625, 620, 620],
-    lastUpdated: 'Just now',
+    lastUpdated: 'Standby',
     minSafe: 350,
     maxSafe: 1200,
   },
@@ -138,29 +187,29 @@ const initialTelemetry: TelemetryState = {
     unit: '% VOL',
     status: 'safe',
     trend: [20.9, 20.8, 20.8, 20.7, 20.8, 20.8, 20.8],
-    lastUpdated: 'Just now',
+    lastUpdated: 'Nominal',
     minSafe: 19.5,
     maxSafe: 23.5,
   },
   temp: {
-    label: 'Ambient Temperature',
-    value: 24.2,
+    label: 'Temperature (DHT22)',
+    value: 0,
     unit: '°C',
     status: 'safe',
-    trend: [23.8, 23.9, 24.1, 24.2, 24.3, 24.2, 24.2],
-    lastUpdated: 'Just now',
+    trend: [],
+    lastUpdated: 'Connecting...',
     minSafe: 10,
-    maxSafe: 35,
+    maxSafe: 40,
   },
   humidity: {
-    label: 'Relative Humidity',
-    value: 62.4,
+    label: 'Humidity (DHT22)',
+    value: 0,
     unit: '% RH',
     status: 'safe',
-    trend: [61.0, 61.5, 62.0, 62.8, 62.6, 62.4, 62.4],
-    lastUpdated: 'Just now',
-    minSafe: 30,
-    maxSafe: 80,
+    trend: [],
+    lastUpdated: 'Connecting...',
+    minSafe: 20,
+    maxSafe: 90,
   },
   pressure: {
     label: 'Barometric Pressure',
@@ -233,10 +282,10 @@ const initialTelemetry: TelemetryState = {
   connections: {
     mqtt: true,
     supabase: true,
-    isDemo: true, // Display DEMO DATA badge clearly
+    isDemo: false,
     brokerUrl: 'wss://telemetry.trayate.systems/mqtt',
     lastPing: '2s ago',
-    connectedEsp32Count: 4,
+    connectedEsp32Count: 1, // ESP32-01 online
   },
   soundMuted: false,
 };
@@ -244,88 +293,125 @@ const initialTelemetry: TelemetryState = {
 export function useTelemetry() {
   const [telemetry, setTelemetry] = useState<TelemetryState>(initialTelemetry);
   const deadmanTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef<boolean>(false);
 
-  // Mission timer & simulation tick
+  // 1. Mission Clock (ticks every 1s)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTelemetry((prev) => {
-        const nextElapsed = prev.mission.elapsedSeconds + 1;
-
-        if (prev.hardwareMode === 'LIVE_HARDWARE') {
-          // When in live hardware mode and no direct hardware packet is delivered,
-          // maintain true empty state / un-jittered values to avoid fake data
-          return {
-            ...prev,
-            mission: {
-              ...prev.mission,
-              elapsedSeconds: nextElapsed,
-            },
-          };
-        }
-
-        // Natural telemetry jitter for simulation mode
-        const ch4Jitter = Number((0.11 + Math.random() * 0.03).toFixed(2));
-        const coJitter = Math.floor(7 + Math.random() * 3);
-        const o2Jitter = Number((20.7 + Math.random() * 0.2).toFixed(1));
-        const tempJitter = Number((24.1 + Math.random() * 0.3).toFixed(1));
-        const humJitter = Number((62.0 + Math.random() * 0.8).toFixed(1));
-        const pm10Jitter = Math.floor(60 + Math.random() * 8);
-        const batteryVoltJitter = Number((24.7 + Math.random() * 0.2).toFixed(1));
-
-        return {
-          ...prev,
-          mission: {
-            ...prev.mission,
-            elapsedSeconds: nextElapsed,
-          },
-          ch4: {
-            ...prev.ch4,
-            value: ch4Jitter,
-            trend: [...prev.ch4.trend.slice(1), ch4Jitter],
-            lastUpdated: '1s ago',
-          },
-          co: {
-            ...prev.co,
-            value: coJitter,
-            trend: [...prev.co.trend.slice(1), coJitter],
-            lastUpdated: '1s ago',
-          },
-          o2: {
-            ...prev.o2,
-            value: o2Jitter,
-            trend: [...prev.o2.trend.slice(1), o2Jitter],
-            lastUpdated: '1s ago',
-          },
-          temp: {
-            ...prev.temp,
-            value: tempJitter,
-            trend: [...prev.temp.trend.slice(1), tempJitter],
-            lastUpdated: '1s ago',
-          },
-          humidity: {
-            ...prev.humidity,
-            value: humJitter,
-            trend: [...prev.humidity.trend.slice(1), humJitter],
-            lastUpdated: '1s ago',
-          },
-          pm10: {
-            ...prev.pm10,
-            value: pm10Jitter,
-            trend: [...prev.pm10.trend.slice(1), pm10Jitter],
-            lastUpdated: '1s ago',
-          },
-          rover: {
-            ...prev.rover,
-            batteryVoltage: batteryVoltJitter,
-          },
-        };
-      });
+    const timer = setInterval(() => {
+      setTelemetry((prev) => ({
+        ...prev,
+        mission: {
+          ...prev.mission,
+          elapsedSeconds: prev.mission.elapsedSeconds + 1,
+        },
+      }));
     }, 1000);
-
-    return () => clearInterval(interval);
+    return () => clearInterval(timer);
   }, []);
 
-  // Deadman watchdog: If movement is active but no keep-alive received within 800ms, force halt
+  // 2. Physical ESP32 Hardware Poller (Every 1000ms)
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      if (isPollingRef.current) return;
+      isPollingRef.current = true;
+
+      try {
+        const liveData: ESP32SensorResponse = await fetchLiveSensorData();
+
+        setTelemetry((prev) => {
+          const timestamp = liveData.timestamp || new Date().toLocaleTimeString();
+          const latency = liveData.latencyMs || 15;
+
+          const newHistoryItem = {
+            time: timestamp,
+            distance: liveData.distance,
+            mq4_raw: liveData.mq4_raw,
+            mq135_raw: liveData.mq135_raw,
+            temperature: liveData.temperature,
+            humidity: liveData.humidity,
+          };
+
+          const nextHistory = [...prev.physicalHardware.history.slice(-39), newHistoryItem];
+
+          return {
+            ...prev,
+            physicalHardware: {
+              ...prev.physicalHardware,
+              esp32_01_connected: true,
+              distance: liveData.distance,
+              distanceStatus: liveData.status,
+              mq4_raw: liveData.mq4_raw,
+              mq135_raw: liveData.mq135_raw,
+              temperature: liveData.temperature,
+              humidity: liveData.humidity,
+              servoAngle: liveData.angle,
+              lastUpdated: timestamp,
+              latencyMs: latency,
+              consecutiveFailures: 0,
+              pollError: null,
+              isInitialLoading: false,
+              history: nextHistory,
+            },
+            // Map live physical readings into primary state
+            temp: {
+              ...prev.temp,
+              value: liveData.temperature,
+              trend: [...prev.temp.trend.slice(-10), liveData.temperature],
+              lastUpdated: `${timestamp} (DHT22)`,
+            },
+            humidity: {
+              ...prev.humidity,
+              value: liveData.humidity,
+              trend: [...prev.humidity.trend.slice(-10), liveData.humidity],
+              lastUpdated: `${timestamp} (DHT22)`,
+            },
+            ch4: {
+              ...prev.ch4,
+              value: liveData.mq4_raw,
+              trend: [...prev.ch4.trend.slice(-10), liveData.mq4_raw],
+              lastUpdated: `${timestamp} (RAW ADC)`,
+            },
+            co: {
+              ...prev.co,
+              value: liveData.mq135_raw,
+              trend: [...prev.co.trend.slice(-10), liveData.mq135_raw],
+              lastUpdated: `${timestamp} (RAW ADC)`,
+            },
+            connections: {
+              ...prev.connections,
+              isDemo: false,
+              lastPing: `${latency}ms`,
+            },
+          };
+        });
+      } catch (err: unknown) {
+        // Handle polling error
+        const errorMsg = err instanceof Error ? err.message : 'ESP32 sensor timeout';
+
+        setTelemetry((prev) => {
+          const failures = prev.physicalHardware.consecutiveFailures + 1;
+          const isNowOffline = failures >= 3;
+
+          return {
+            ...prev,
+            physicalHardware: {
+              ...prev.physicalHardware,
+              esp32_01_connected: isNowOffline ? false : prev.physicalHardware.esp32_01_connected,
+              consecutiveFailures: failures,
+              pollError: errorMsg,
+              isInitialLoading: false,
+            },
+          };
+        });
+      } finally {
+        isPollingRef.current = false;
+      }
+    }, 1000);
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
+  // Deadman watchdog timer: Forces STOP if key held without refresh
   const resetDeadmanWatchdog = useCallback(() => {
     if (deadmanTimerRef.current) {
       clearTimeout(deadmanTimerRef.current);
@@ -348,23 +434,19 @@ export function useTelemetry() {
     }, 800);
   }, []);
 
-  // Movement command dispatcher with deadman protection & E-stop interlock
-  const sendMovementCommand = useCallback((direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP') => {
+  // Send movement command (Arrow keys / WASD / UI buttons)
+  const sendMovementCommand = useCallback(async (direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP') => {
+    // 1. Update local UI state
     setTelemetry((prev) => {
-      // E-stop safety interlock or disconnected safety
-      if (prev.rover.eStopTriggered || prev.rover.connectivity === 'OFFLINE') {
-        return prev;
-      }
+      if (prev.rover.eStopTriggered) return prev;
 
       const governorMultiplier = prev.rover.speedGovernorPercent / 100;
       const targetSpeed = direction === 'STOP' ? 0.0 : Number((1.2 * governorMultiplier).toFixed(2));
       
-      // Compute heading delta
       let nextHeading = prev.rover.headingDeg;
       if (direction === 'LEFT') nextHeading = (nextHeading - 5 + 360) % 360;
       if (direction === 'RIGHT') nextHeading = (nextHeading + 5) % 360;
 
-      // Compute position delta
       let nextX = prev.rover.position.x;
       let nextY = prev.rover.position.y;
       if (direction === 'FORWARD') {
@@ -399,10 +481,36 @@ export function useTelemetry() {
     if (direction !== 'STOP') {
       resetDeadmanWatchdog();
     }
-  }, [resetDeadmanWatchdog]);
+
+    // 2. Dispatch to physical ESP32-02 (Rover Motor Controller)
+    // Note: Never sends motor commands to ESP32-01
+    await sendMotorMovement(direction, telemetry.rover.speedGovernorPercent);
+  }, [resetDeadmanWatchdog, telemetry.rover.speedGovernorPercent]);
+
+  // Physical Servo Scanner angle control
+  const setPhysicalServoAngle = useCallback(async (angle: number): Promise<boolean> => {
+    soundManager.playClickTone();
+    try {
+      const res = await sendServoAngleCommand(angle);
+      if (res.success) {
+        setTelemetry((prev) => ({
+          ...prev,
+          physicalHardware: {
+            ...prev.physicalHardware,
+            servoAngle: res.angle,
+          },
+        }));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const triggerEStop = useCallback(() => {
     soundManager.playCriticalAlarm();
+    triggerHardwareEmergencyStop();
     setTelemetry((prev) => ({
       ...prev,
       rover: {
@@ -517,6 +625,7 @@ export function useTelemetry() {
   return {
     telemetry,
     sendMovementCommand,
+    setPhysicalServoAngle,
     triggerEStop,
     resetEStop,
     setSpeedGovernor,

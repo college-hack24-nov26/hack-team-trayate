@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { soundManager } from '@/lib/soundAlerts';
+import { getHardwareConfig } from '@/lib/esp32Service';
 import { 
   AlertOctagon, 
   Gauge, 
   Cpu, 
   ShieldAlert, 
   ShieldCheck, 
-  Compass, 
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   Sliders, 
-  RotateCcw,
-  Zap
+  Square,
+  Zap,
+  Info
 } from 'lucide-react';
 
 export default function MissionKeyboardControls() {
@@ -25,77 +30,112 @@ export default function MissionKeyboardControls() {
     setMovementMode 
   } = useTelemetry();
 
-  // Active pressed keys state
-  const [pressedKeys, setPressedKeys] = useState<{ [key: string]: boolean }>({
-    w: false,
-    a: false,
-    s: false,
-    d: false,
-    space: false,
-  });
+  // Active key state (supporting both Arrow keys and WASD)
+  const [activeDirection, setActiveDirection] = useState<'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP'>('STOP');
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const activeDirectionRef = useRef<'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP'>('STOP');
+  activeDirectionRef.current = activeDirection;
 
-  // Handle Key Down
+  const hardwareConfig = getHardwareConfig();
+  const isMotorConfigured = Boolean(hardwareConfig.motorUrl);
+  const isEStopped = telemetry.rover.eStopTriggered;
+
+  // Key Down Handler
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // If typing in an input element, do not hijack
-    if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+    // 1. Never intercept when operator is typing in an input or textarea
+    const target = e.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) {
       return;
     }
 
-    const key = e.key.toLowerCase();
-
-    if (e.code === 'Space') {
+    // 2. Emergency Stop on SPACEBAR
+    if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
       triggerEStop();
-      setPressedKeys((prev) => ({ ...prev, space: true }));
+      setActiveDirection('STOP');
+      setPressedKey('SPACE');
       return;
     }
 
-    if (['w', 'a', 's', 'd'].includes(key)) {
-      e.preventDefault();
-      if (!pressedKeys[key]) {
-        soundManager.playClickTone();
-        setPressedKeys((prev) => ({ ...prev, [key]: true }));
+    // 3. Arrow Keys and WASD mapping
+    let targetDir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | null = null;
+    let keyName = '';
 
-        if (key === 'w') sendMovementCommand('FORWARD');
-        else if (key === 'a') sendMovementCommand('LEFT');
-        else if (key === 's') sendMovementCommand('BACKWARD');
-        else if (key === 'd') sendMovementCommand('RIGHT');
+    if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
+      targetDir = 'FORWARD';
+      keyName = 'ArrowUp';
+    } else if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
+      targetDir = 'BACKWARD';
+      keyName = 'ArrowDown';
+    } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+      targetDir = 'LEFT';
+      keyName = 'ArrowLeft';
+    } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+      targetDir = 'RIGHT';
+      keyName = 'ArrowRight';
+    }
+
+    if (targetDir) {
+      e.preventDefault(); // Prevent page scrolling!
+      if (activeDirectionRef.current !== targetDir) {
+        soundManager.playClickTone();
+        setActiveDirection(targetDir);
+        setPressedKey(keyName);
+        sendMovementCommand(targetDir);
       }
     }
-  }, [pressedKeys, sendMovementCommand, triggerEStop]);
+  }, [sendMovementCommand, triggerEStop]);
 
-  // Handle Key Up
+  // Key Up Handler (Deadman instantaneous stop on key release)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+    const target = e.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) {
       return;
     }
 
-    const key = e.key.toLowerCase();
-
-    if (e.code === 'Space') {
-      setPressedKeys((prev) => ({ ...prev, space: false }));
+    if (e.code === 'Space' || e.key === ' ') {
+      setPressedKey(null);
       return;
     }
 
-    if (['w', 'a', 's', 'd'].includes(key)) {
+    const isMovementKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) ||
+      ['w', 'a', 's', 'd'].includes(e.key.toLowerCase());
+
+    if (isMovementKey) {
       e.preventDefault();
-      setPressedKeys((prev) => ({ ...prev, [key]: false }));
-      // Deadman instantaneous halt on key release
+      setActiveDirection('STOP');
+      setPressedKey(null);
       sendMovementCommand('STOP');
     }
   }, [sendMovementCommand]);
 
+  // Safety Window Event Listeners:
+  // Immediately stop movement if browser loses focus or tab is hidden!
   useEffect(() => {
+    const handleSafetyStop = () => {
+      setActiveDirection('STOP');
+      setPressedKey(null);
+      sendMovementCommand('STOP');
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleSafetyStop();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleSafetyStop);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleSafetyStop);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [handleKeyDown, handleKeyUp]);
-
-  const isDisconnected = telemetry.rover.connectivity === 'OFFLINE';
-  const isEStopped = telemetry.rover.eStopTriggered;
+  }, [handleKeyDown, handleKeyUp, sendMovementCommand]);
 
   return (
     <div className="bg-brand-card border border-brand-border rounded-xl flex flex-col h-full overflow-hidden">
@@ -139,7 +179,7 @@ export default function MissionKeyboardControls() {
 
       <div className="p-4 flex-1 flex flex-col justify-between gap-4">
         
-        {/* Safety Status Notification / Warning Banner */}
+        {/* Safety & Motor Interlock Warning Banner */}
         {isEStopped ? (
           <div className="p-2.5 rounded-lg bg-brand-danger/15 border border-brand-danger/40 flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-2 text-brand-danger font-mono text-xs font-bold">
@@ -153,109 +193,134 @@ export default function MissionKeyboardControls() {
               Reset
             </button>
           </div>
-        ) : isDisconnected ? (
-          <div className="p-2.5 rounded-lg bg-brand-danger/10 border border-brand-danger/30 flex items-center gap-2 text-brand-danger font-mono text-xs">
-            <ShieldAlert className="w-4 h-4 shrink-0" />
-            <span>ROVER OFFLINE // COMMAND DISPATCH INHIBITED</span>
+        ) : !isMotorConfigured ? (
+          <div className="p-2.5 rounded-lg bg-brand-warning/10 border border-brand-warning/30 flex items-center justify-between text-brand-warning font-mono text-[11px]">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>ESP32-02 MOTOR IP AWAITING CONFIGURATION</span>
+            </div>
+            <span className="text-[9px] bg-brand-warning/20 px-1.5 py-0.5 rounded">SAFETY LOCK</span>
           </div>
         ) : (
           <div className="p-2 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-between font-mono text-xs">
             <div className="flex items-center gap-2">
-              <span className="text-brand-secondaryText">STATE:</span>
+              <span className="text-brand-secondaryText">DIR:</span>
               <span className={`font-bold ${
-                telemetry.rover.currentMovement !== 'STOP' ? 'text-brand-accent animate-pulse' : 'text-brand-secondaryText'
+                activeDirection !== 'STOP' ? 'text-brand-accent animate-pulse' : 'text-brand-secondaryText'
               }`}>
-                {telemetry.rover.currentMovement}
+                {activeDirection}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-brand-secondaryText">SPEED:</span>
               <span className="text-brand-primaryText font-bold">
-                {telemetry.rover.speedMps.toFixed(1)} m/s
+                {telemetry.rover.speedGovernorPercent}%
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-brand-secondaryText">HEADING:</span>
-              <span className="text-brand-accent font-bold">
-                {telemetry.rover.headingDeg}°
+              <span className="text-brand-secondaryText">TARGET:</span>
+              <span className="text-brand-success font-semibold">
+                ESP32-02
               </span>
             </div>
           </div>
         )}
 
-        {/* Interactive Keyboard Visual Indicator Grid */}
-        <div className="flex flex-col items-center justify-center py-2 space-y-2 select-none">
-          {/* Key W */}
+        {/* Visual Directional Control Pad (Arrow keys & WASD) */}
+        <div className="flex flex-col items-center justify-center py-1 space-y-2 select-none">
+          
+          {/* Forward (ArrowUp / W) */}
           <div className="flex justify-center">
             <button
-              onMouseDown={() => sendMovementCommand('FORWARD')}
-              onMouseUp={() => sendMovementCommand('STOP')}
-              disabled={isEStopped || isDisconnected}
+              onMouseDown={() => { setActiveDirection('FORWARD'); sendMovementCommand('FORWARD'); }}
+              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onTouchStart={() => { setActiveDirection('FORWARD'); sendMovementCommand('FORWARD'); }}
+              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              disabled={isEStopped}
               className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
-                pressedKeys.w || telemetry.rover.currentMovement === 'FORWARD'
+                pressedKey === 'ArrowUp' || activeDirection === 'FORWARD'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
               } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
-              <span className="text-lg leading-none">W</span>
-              <span className="text-[9px] uppercase tracking-tighter opacity-80 mt-0.5">FWD</span>
+              <ArrowUp className="w-5 h-5 leading-none" />
+              <span className="text-[8px] uppercase mt-0.5">FWD (↑/W)</span>
             </button>
           </div>
 
-          {/* Keys A, S, D */}
+          {/* Left, STOP, Right */}
           <div className="flex items-center justify-center gap-2">
-            {/* Key A */}
+            
+            {/* Left (ArrowLeft / A) */}
             <button
-              onMouseDown={() => sendMovementCommand('LEFT')}
-              onMouseUp={() => sendMovementCommand('STOP')}
-              disabled={isEStopped || isDisconnected}
+              onMouseDown={() => { setActiveDirection('LEFT'); sendMovementCommand('LEFT'); }}
+              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onTouchStart={() => { setActiveDirection('LEFT'); sendMovementCommand('LEFT'); }}
+              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              disabled={isEStopped}
               className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
-                pressedKeys.a || telemetry.rover.currentMovement === 'LEFT'
+                pressedKey === 'ArrowLeft' || activeDirection === 'LEFT'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
               } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
-              <span className="text-lg leading-none">A</span>
-              <span className="text-[9px] uppercase tracking-tighter opacity-80 mt-0.5">LEFT</span>
+              <ArrowLeft className="w-5 h-5 leading-none" />
+              <span className="text-[8px] uppercase mt-0.5">LEFT (←/A)</span>
             </button>
 
-            {/* Key S */}
+            {/* STOP Button */}
             <button
-              onMouseDown={() => sendMovementCommand('BACKWARD')}
-              onMouseUp={() => sendMovementCommand('STOP')}
-              disabled={isEStopped || isDisconnected}
-              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
-                pressedKeys.s || telemetry.rover.currentMovement === 'BACKWARD'
-                  ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
-                  : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
-              } disabled:opacity-30 disabled:cursor-not-allowed`}
+              onClick={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              className="w-14 h-14 rounded-lg border-2 border-brand-border bg-brand-bg hover:bg-brand-secondary text-brand-danger font-mono font-bold flex flex-col items-center justify-center transition-all shadow-md active:scale-95"
+              title="Stop Rover Locomotion"
             >
-              <span className="text-lg leading-none">S</span>
-              <span className="text-[9px] uppercase tracking-tighter opacity-80 mt-0.5">REV</span>
+              <Square className="w-4 h-4 fill-current leading-none" />
+              <span className="text-[8px] uppercase mt-0.5 font-bold">STOP</span>
             </button>
 
-            {/* Key D */}
+            {/* Right (ArrowRight / D) */}
             <button
-              onMouseDown={() => sendMovementCommand('RIGHT')}
-              onMouseUp={() => sendMovementCommand('STOP')}
-              disabled={isEStopped || isDisconnected}
+              onMouseDown={() => { setActiveDirection('RIGHT'); sendMovementCommand('RIGHT'); }}
+              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onTouchStart={() => { setActiveDirection('RIGHT'); sendMovementCommand('RIGHT'); }}
+              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              disabled={isEStopped}
               className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
-                pressedKeys.d || telemetry.rover.currentMovement === 'RIGHT'
+                pressedKey === 'ArrowRight' || activeDirection === 'RIGHT'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
               } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
-              <span className="text-lg leading-none">D</span>
-              <span className="text-[9px] uppercase tracking-tighter opacity-80 mt-0.5">RIGHT</span>
+              <ArrowRight className="w-5 h-5 leading-none" />
+              <span className="text-[8px] uppercase mt-0.5">RIGHT (→/D)</span>
             </button>
           </div>
 
-          {/* Key Spacebar: Emergency Stop */}
+          {/* Backward (ArrowDown / S) */}
+          <div className="flex justify-center">
+            <button
+              onMouseDown={() => { setActiveDirection('BACKWARD'); sendMovementCommand('BACKWARD'); }}
+              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onTouchStart={() => { setActiveDirection('BACKWARD'); sendMovementCommand('BACKWARD'); }}
+              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              disabled={isEStopped}
+              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
+                pressedKey === 'ArrowDown' || activeDirection === 'BACKWARD'
+                  ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
+                  : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+            >
+              <ArrowDown className="w-5 h-5 leading-none" />
+              <span className="text-[8px] uppercase mt-0.5">REV (↓/S)</span>
+            </button>
+          </div>
+
+          {/* SPACEBAR EMERGENCY STOP BUTTON */}
           <div className="w-full pt-1">
             <button
               onClick={triggerEStop}
               className={`w-full py-2.5 rounded-lg border-2 font-mono font-bold text-xs uppercase flex items-center justify-center gap-2 transition-all ${
-                pressedKeys.space || isEStopped
+                pressedKey === 'SPACE' || isEStopped
                   ? 'bg-brand-danger text-white border-brand-danger shadow-[0_0_20px_rgba(239,68,68,0.6)]'
                   : 'bg-brand-danger/20 border-brand-danger/60 text-brand-danger hover:bg-brand-danger hover:text-white'
               }`}
@@ -266,15 +331,15 @@ export default function MissionKeyboardControls() {
           </div>
         </div>
 
-        {/* Speed Governor Slider & Telemetry */}
-        <div className="space-y-2 pt-2 border-t border-brand-border">
+        {/* Speed Governor Slider & Readout */}
+        <div className="space-y-1.5 pt-2 border-t border-brand-border">
           <div className="flex items-center justify-between font-mono text-xs">
             <span className="text-brand-secondaryText flex items-center gap-1.5">
               <Gauge className="w-3.5 h-3.5 text-brand-accent" />
-              <span>SPEED GOVERNOR:</span>
+              <span>MOTOR PWM SPEED GOVERNOR:</span>
             </span>
             <span className="font-bold text-brand-accent">
-              {telemetry.rover.speedGovernorPercent}% ({(1.2 * (telemetry.rover.speedGovernorPercent / 100)).toFixed(2)} m/s max)
+              {telemetry.rover.speedGovernorPercent}%
             </span>
           </div>
 
@@ -289,20 +354,20 @@ export default function MissionKeyboardControls() {
           />
 
           <div className="flex justify-between text-[9px] font-mono text-brand-secondaryText/60">
-            <span>10% (CRAWL)</span>
-            <span>50% (NOMINAL)</span>
-            <span>100% (RESCUE SPRINT)</span>
+            <span>10% (CREEP)</span>
+            <span>60% (NOMINAL)</span>
+            <span>100% (MAX CRAWL)</span>
           </div>
         </div>
 
-        {/* Deadman & Hardware Safety Notice */}
-        <div className="p-2.5 rounded bg-brand-bg/60 border border-brand-border font-mono text-[9px] text-brand-secondaryText space-y-1">
-          <div className="flex items-center gap-1.5 text-brand-success font-semibold">
+        {/* Safety Directives */}
+        <div className="p-2 rounded bg-brand-bg/60 border border-brand-border font-mono text-[9px] text-brand-secondaryText space-y-0.5">
+          <div className="flex items-center gap-1 text-brand-success font-semibold">
             <ShieldCheck className="w-3 h-3 text-brand-success" />
-            <span>DEADMAN INTERLOCK ACTIVE</span>
+            <span>SAFETY INTERLOCK ACTIVE</span>
           </div>
-          <p className="leading-tight text-brand-secondaryText/80">
-            Movement halts instantly upon key release. The onboard ESP32 independently shuts down all 6 motor inverters if telemetry drops for &gt;600ms.
+          <p className="text-brand-secondaryText/80 leading-tight">
+            Commands are dead-man latched. Releasing key or losing window focus immediately halts locomotion.
           </p>
         </div>
 
@@ -310,4 +375,3 @@ export default function MissionKeyboardControls() {
     </div>
   );
 }
-
