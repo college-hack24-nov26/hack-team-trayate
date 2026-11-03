@@ -143,7 +143,7 @@ const initialTelemetry: TelemetryState = {
     history: [],
   },
   camera: {
-    url: 'http://192.168.1.100:8080/video',
+    url: 'http://192.168.4.57:8080/video',
     status: 'DISCONNECTED',
     fps: 30,
     latencyMs: 38,

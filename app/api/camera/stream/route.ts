@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Server-side streaming relay for IP Webcam (Android) to avoid HTTPS mixed-content & CORS blocks
+export const dynamic = 'force-dynamic';
+
+// Server-side streaming relay for IP Webcam (Android)
+// Pipes continuous multipart MJPEG stream or single snapshot without premature timeout
 export async function GET(req: NextRequest) {
   const urlParam = req.nextUrl.searchParams.get('url');
 
@@ -15,21 +18,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL protocol' }, { status: 400 });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
     const upstreamResponse = await fetch(urlParam, {
-      signal: controller.signal,
+      cache: 'no-store',
       headers: {
-        'Accept': 'multipart/x-mixed-replace; boundary=--boundarydonotcross, image/jpeg, */*',
+        'Accept': 'multipart/x-mixed-replace; boundary=--boundarydonotcross, image/jpeg, image/webp, */*',
       },
     });
 
-    clearTimeout(timeout);
-
     if (!upstreamResponse.ok || !upstreamResponse.body) {
       return NextResponse.json({ 
-        error: `Camera stream responded with ${upstreamResponse.status}: ${upstreamResponse.statusText}` 
+        error: `Camera stream responded with HTTP ${upstreamResponse.status}: ${upstreamResponse.statusText}` 
       }, { status: 502 });
     }
 
@@ -48,8 +46,7 @@ export async function GET(req: NextRequest) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown stream error';
     return NextResponse.json({ 
       error: `Failed to connect to IP Webcam stream: ${errorMsg}`,
-      hint: 'Ensure your Android device running IP Webcam is on the same local Wi-Fi/mesh network.'
+      hint: 'Ensure your Android device running IP Webcam is on the same local Wi-Fi/hotspot network.'
     }, { status: 504 });
   }
 }
-

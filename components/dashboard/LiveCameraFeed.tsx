@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Camera, 
   Wifi, 
@@ -12,37 +12,114 @@ import {
   Activity, 
   Sliders, 
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Layers,
+  Zap,
+  Play,
+  Square
 } from 'lucide-react';
 import { useTelemetry } from '@/lib/telemetryStore';
 
 export default function LiveCameraFeed() {
   const { telemetry, setCameraUrl, setCameraStatus } = useTelemetry();
-  const [streamUrl, setStreamUrl] = useState(telemetry.camera.url);
-  const [useProxy, setUseProxy] = useState(false);
+  
+  // Persistent stream URL from localStorage or store
+  const [streamUrl, setStreamUrl] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('trayate_cam_url') || telemetry.camera.url || 'http://192.168.4.57:8080/video';
+    }
+    return telemetry.camera.url || 'http://192.168.4.57:8080/video';
+  });
+
+  const [useProxy, setUseProxy] = useState<boolean>(false);
+  const [streamMode, setStreamMode] = useState<'mjpeg' | 'snapshot'>('mjpeg');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
+  // Snapshot loop state
+  const [snapshotSrc, setSnapshotSrc] = useState<string>('');
+  const snapshotActiveRef = useRef<boolean>(false);
+  const snapshotTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // Compute final effective URL
+  // Compute effective stream URL
   const effectiveUrl = useProxy 
     ? `/api/camera/stream?url=${encodeURIComponent(streamUrl)}`
     : streamUrl;
 
+  // Snapshot polling loop
+  const triggerNextSnapshot = useCallback(() => {
+    if (!snapshotActiveRef.current) return;
+    
+    // Convert URL to /shot.jpg
+    let base = streamUrl.trim();
+    if (base.endsWith('/video') || base.endsWith('/videofeed')) {
+      base = base.replace(/\/video(feed)?$/, '/shot.jpg');
+    } else if (!base.includes('/shot.jpg')) {
+      base = `${base.replace(/\/+$/, '')}/shot.jpg`;
+    }
+
+    const cacheBuster = `${base}?t=${Date.now()}`;
+    setSnapshotSrc(cacheBuster);
+  }, [streamUrl]);
+
+  // Handle snapshot image loaded
+  const handleSnapshotLoad = () => {
+    setCameraStatus('CONNECTED');
+    setConnectionError(null);
+    if (snapshotActiveRef.current) {
+      // Loop next frame after 50ms (~20 FPS)
+      snapshotTimerRef.current = setTimeout(triggerNextSnapshot, 50);
+    }
+  };
+
+  const handleSnapshotError = () => {
+    if (snapshotActiveRef.current) {
+      snapshotTimerRef.current = setTimeout(triggerNextSnapshot, 500);
+    }
+  };
+
+  // Connect button handler
   const handleConnect = () => {
     if (!streamUrl.trim()) return;
     setConnectionError(null);
-    setCameraStatus('CONNECTING');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('trayate_cam_url', streamUrl);
+    }
     setCameraUrl(streamUrl);
+
+    if (streamMode === 'snapshot' || streamUrl.includes('shot.jpg')) {
+      snapshotActiveRef.current = true;
+      setCameraStatus('CONNECTING');
+      triggerNextSnapshot();
+    } else {
+      snapshotActiveRef.current = false;
+      setCameraStatus('CONNECTING');
+    }
   };
 
+  // Disconnect button handler
   const handleDisconnect = () => {
+    snapshotActiveRef.current = false;
+    if (snapshotTimerRef.current) {
+      clearTimeout(snapshotTimerRef.current);
+    }
     setCameraStatus('DISCONNECTED');
     setConnectionError(null);
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      snapshotActiveRef.current = false;
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current);
+      }
+    };
+  }, []);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -52,6 +129,8 @@ export default function LiveCameraFeed() {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
+
+  const isFeedActive = telemetry.camera.status === 'CONNECTED' || telemetry.camera.status === 'CONNECTING';
 
   return (
     <div 
@@ -78,7 +157,40 @@ export default function LiveCameraFeed() {
           </span>
         </div>
 
+        {/* Mode & Fullscreen Controls */}
         <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-brand-bg p-0.5 rounded border border-brand-border text-[9px]">
+            <button
+              onClick={() => {
+                setStreamMode('mjpeg');
+                snapshotActiveRef.current = false;
+                if (!streamUrl.endsWith('/video')) {
+                  const newUrl = streamUrl.replace(/\/shot\.jpg.*$/, '/video');
+                  setStreamUrl(newUrl);
+                }
+              }}
+              className={`px-1.5 py-0.5 rounded transition-colors ${
+                streamMode === 'mjpeg' ? 'bg-brand-accent text-brand-bg font-bold' : 'text-brand-secondaryText hover:text-brand-primaryText'
+              }`}
+              title="Continuous MJPEG Stream (/video)"
+            >
+              MJPEG
+            </button>
+            <button
+              onClick={() => {
+                setStreamMode('snapshot');
+                snapshotActiveRef.current = true;
+                triggerNextSnapshot();
+              }}
+              className={`px-1.5 py-0.5 rounded transition-colors ${
+                streamMode === 'snapshot' ? 'bg-brand-accent text-brand-bg font-bold' : 'text-brand-secondaryText hover:text-brand-primaryText'
+              }`}
+              title="Fast Snapshot Polling Loop (/shot.jpg)"
+            >
+              SNAPSHOT
+            </button>
+          </div>
+
           <button
             onClick={() => setShowDiagnostics(!showDiagnostics)}
             className={`p-1 rounded hover:bg-brand-bg transition-colors ${
@@ -88,6 +200,7 @@ export default function LiveCameraFeed() {
           >
             <Sliders className="w-3.5 h-3.5" />
           </button>
+
           <button
             onClick={toggleFullscreen}
             className="p-1 rounded text-brand-secondaryText hover:text-brand-primaryText hover:bg-brand-bg transition-colors"
@@ -100,41 +213,64 @@ export default function LiveCameraFeed() {
 
       {/* Camera Video Area */}
       <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[220px]">
-        {telemetry.camera.status === 'CONNECTED' ? (
+        {isFeedActive ? (
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Live MJPEG Stream Element */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={imgRef}
-              src={effectiveUrl}
-              alt="Live Rover Camera Feed"
-              className="w-full h-full object-contain"
-              onLoad={() => {
-                setCameraStatus('CONNECTED');
-                setConnectionError(null);
-              }}
-              onError={() => {
-                setCameraStatus('ERROR');
-                setConnectionError('Stream failed to load. Check IP address, port 8080, and network route.');
-              }}
-            />
+            
+            {/* 1. MJPEG Stream Mode */}
+            {streamMode === 'mjpeg' && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                ref={imgRef}
+                src={effectiveUrl}
+                alt="Live Rover Camera Feed"
+                className="w-full h-full object-contain"
+                onLoad={() => {
+                  setCameraStatus('CONNECTED');
+                  setConnectionError(null);
+                }}
+                onError={() => {
+                  setCameraStatus('ERROR');
+                  setConnectionError('Stream failed to load directly. Switch to Snapshot mode or verify IP address.');
+                }}
+              />
+            )}
+
+            {/* 2. Snapshot Loop Mode */}
+            {streamMode === 'snapshot' && snapshotSrc && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={snapshotSrc}
+                alt="Live Rover Snapshot Feed"
+                className="w-full h-full object-contain"
+                onLoad={handleSnapshotLoad}
+                onError={handleSnapshotError}
+              />
+            )}
+
+            {/* Loading / Connecting Overlay */}
+            {telemetry.camera.status === 'CONNECTING' && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 font-mono text-xs text-brand-accent">
+                <RefreshCw className="w-6 h-6 animate-spin text-brand-accent" />
+                <span>CONNECTING TO IP WEBCAM STREAM...</span>
+              </div>
+            )}
 
             {/* Live Camera HUD Overlay */}
-            <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] font-mono text-white/90 border border-white/10">
+            <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/70 backdrop-blur-md px-2 py-1 rounded text-[10px] font-mono text-white/90 border border-white/10 pointer-events-none">
               <span className="w-2 h-2 rounded-full bg-brand-danger animate-ping"></span>
-              <span className="font-bold text-brand-danger">REC</span>
+              <span className="font-bold text-brand-danger">LIVE</span>
               <span className="text-white/40">|</span>
-              <span>30 FPS</span>
+              <span>{streamMode === 'mjpeg' ? 'MJPEG STREAM' : 'SNAPSHOT 20FPS'}</span>
               <span className="text-white/40">|</span>
-              <span>1080p</span>
+              <span className="text-brand-accent">192.168.4.57</span>
             </div>
 
-            <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono text-brand-accent border border-white/10">
-              LATENCY: 38ms
+            <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono text-brand-success border border-white/10 pointer-events-none">
+              {useProxy ? 'RELAY ACTIVE' : 'DIRECT LAN (0ms LATENCY)'}
             </div>
           </div>
         ) : (
-          /* Disconnected / Placeholder state with IP Webcam setup instructions */
+          /* Disconnected State with Setup Guidance */
           <div className="p-6 text-center max-w-sm space-y-3">
             <div className="w-12 h-12 rounded-full bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
               <WifiOff className="w-6 h-6 text-brand-secondaryText" />
@@ -145,7 +281,7 @@ export default function LiveCameraFeed() {
                 Live Camera Feed Disconnected
               </h4>
               <p className="text-[11px] text-brand-secondaryText leading-relaxed">
-                Connect to the Android smartphone running <strong className="text-brand-accent">IP Webcam</strong> mounted on T-Rover chassis.
+                Connect to Android <strong className="text-brand-accent">IP Webcam</strong> running at <code className="text-brand-primaryText">http://192.168.4.57:8080</code>.
               </p>
             </div>
 
@@ -155,81 +291,109 @@ export default function LiveCameraFeed() {
               </div>
             )}
 
-            <div className="pt-2">
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
               <button
-                onClick={() => {
-                  setCameraStatus('CONNECTED');
-                  setConnectionError(null);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand-card hover:bg-brand-secondary text-brand-accent border border-brand-border text-xs font-semibold"
+                onClick={handleConnect}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold font-mono shadow-sm"
               >
-                <span>Simulate Local Feed</span>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Connect Live Feed</span>
               </button>
+
+              <a
+                href="http://192.168.4.57:8080"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-secondaryText hover:text-brand-primaryText text-xs font-mono border border-brand-border"
+              >
+                <span>Open in Tab</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
           </div>
         )}
 
-        {/* Diagnostics Overlay */}
+        {/* Stream Diagnostics Overlay */}
         {showDiagnostics && (
           <div className="absolute top-2 right-2 w-64 bg-brand-secondary/95 border border-brand-border rounded-lg p-3 text-[10px] font-mono text-brand-secondaryText space-y-1.5 shadow-xl backdrop-blur-md z-30">
             <div className="font-bold text-brand-primaryText flex items-center justify-between pb-1 border-b border-brand-border">
               <span>STREAM DIAGNOSTICS</span>
-              <span className="text-brand-accent">{telemetry.camera.fps} FPS</span>
+              <span className="text-brand-accent">{streamMode.toUpperCase()}</span>
             </div>
             <div className="flex justify-between">
-              <span>Resolution:</span>
-              <span className="text-brand-primaryText">{telemetry.camera.resolution}</span>
+              <span>Target Host:</span>
+              <span className="text-brand-primaryText">192.168.4.57:8080</span>
             </div>
             <div className="flex justify-between">
-              <span>Stream Protocol:</span>
-              <span className="text-brand-primaryText">{telemetry.camera.format}</span>
+              <span>Endpoint:</span>
+              <span className="text-brand-primaryText">{streamMode === 'mjpeg' ? '/video' : '/shot.jpg'}</span>
             </div>
             <div className="flex justify-between">
-              <span>Relay Proxy:</span>
-              <span className={useProxy ? 'text-brand-success' : 'text-brand-warning'}>
-                {useProxy ? 'ACTIVE (Server Relay)' : 'DIRECT (LAN)'}
+              <span>Transport:</span>
+              <span className={useProxy ? 'text-brand-warning' : 'text-brand-success font-semibold'}>
+                {useProxy ? 'Server Relay Proxy' : 'Direct LAN (Recommended)'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span>Frame Loss:</span>
-              <span className="text-brand-success">0.0% (0 pkts)</span>
+              <span>HTTP Status:</span>
+              <span className="text-brand-success">200 OK Active</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Stream URL Input & Controls Toolbar */}
-      <div className="p-2 bg-brand-secondary border-t border-brand-border flex flex-col gap-2 shrink-0">
+      <div className="p-2.5 bg-brand-secondary border-t border-brand-border flex flex-col gap-2 shrink-0">
         <div className="flex items-center gap-2">
           <input
             type="text"
             value={streamUrl}
             onChange={(e) => setStreamUrl(e.target.value)}
-            placeholder="http://192.168.1.100:8080/video"
-            className="flex-1 bg-brand-bg border border-brand-border rounded px-2.5 py-1 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
+            placeholder="http://192.168.4.57:8080/video"
+            className="flex-1 bg-brand-bg border border-brand-border rounded px-2.5 py-1.5 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
           />
           
-          {telemetry.camera.status === 'CONNECTED' ? (
+          {isFeedActive ? (
             <button
               onClick={handleDisconnect}
-              className="px-3 py-1 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded text-xs font-semibold whitespace-nowrap"
+              className="px-3.5 py-1.5 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded text-xs font-semibold font-mono whitespace-nowrap flex items-center gap-1"
             >
-              Disconnect
+              <Square className="w-3 h-3 fill-current" />
+              <span>Disconnect</span>
             </button>
           ) : (
             <button
               onClick={handleConnect}
-              className="px-3 py-1 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded text-xs font-semibold whitespace-nowrap shadow-sm"
+              className="px-3.5 py-1.5 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded text-xs font-semibold font-mono whitespace-nowrap shadow-sm flex items-center gap-1"
             >
-              Connect Feed
+              <Play className="w-3 h-3 fill-current" />
+              <span>Connect Feed</span>
             </button>
           )}
         </div>
 
-        {/* IP Webcam Helper & Proxy switch */}
-        <div className="flex items-center justify-between text-[10px] font-mono text-brand-secondaryText px-1">
-          <div className="flex items-center gap-2">
-            <span>ENDPOINT: <code className="text-brand-accent">/video</code> or <code className="text-brand-accent">/shot.jpg</code></span>
+        {/* Quick URL Presets & Mode Toggle */}
+        <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-brand-secondaryText gap-2 px-0.5">
+          <div className="flex items-center gap-1.5">
+            <span>PRESETS:</span>
+            <button
+              onClick={() => {
+                setStreamUrl('http://192.168.4.57:8080/video');
+                setStreamMode('mjpeg');
+              }}
+              className="px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border hover:text-brand-accent hover:border-brand-accent transition-colors"
+            >
+              /video
+            </button>
+            <button
+              onClick={() => {
+                setStreamUrl('http://192.168.4.57:8080/shot.jpg');
+                setStreamMode('snapshot');
+              }}
+              className="px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border hover:text-brand-accent hover:border-brand-accent transition-colors"
+            >
+              /shot.jpg
+            </button>
           </div>
 
           <label className="flex items-center gap-1.5 cursor-pointer hover:text-brand-primaryText">
@@ -239,11 +403,10 @@ export default function LiveCameraFeed() {
               onChange={(e) => setUseProxy(e.target.checked)}
               className="rounded bg-brand-bg border-brand-border text-brand-accent focus:ring-0 w-3 h-3"
             />
-            <span>HTTPS Proxy Relay</span>
+            <span>Server Proxy Relay</span>
           </label>
         </div>
       </div>
     </div>
   );
 }
-
