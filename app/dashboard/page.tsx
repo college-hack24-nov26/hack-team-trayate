@@ -2,7 +2,6 @@
 
 import { useTelemetry } from '@/lib/telemetryStore';
 import SensorCard from '@/components/dashboard/SensorCard';
-import DustCleanerCard from '@/components/DustCleanerCard';
 import MineMapCanvas from '@/components/dashboard/MineMapCanvas';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -20,6 +19,7 @@ import {
   CheckCircle2, 
   Clock, 
   ShieldCheck, 
+  UserCheck, 
   AlertOctagon, 
   Volume2, 
   VolumeX, 
@@ -241,17 +241,17 @@ export default function DashboardOverviewPage() {
           <Link href="/dashboard/mission" className="text-brand-accent hover:underline text-[11px]">View</Link>
         </div>
 
-        {/* DustCleaner State */}
+        {/* AI Human Detection Status */}
         <div className="bg-brand-card border border-brand-border rounded-xl p-4 flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-brand-secondaryText text-[10px]">DUSTCLEANER CORE</span>
-            <div className="font-bold text-brand-warning text-sm flex items-center gap-1.5">
-              <Wind className="w-3.5 h-3.5 text-brand-warning" />
-              <span>{telemetry.dustCleaner.status}</span>
+            <span className="text-brand-secondaryText text-[10px]">AI HUMAN DETECTION</span>
+            <div className="font-bold text-sm flex items-center gap-1.5 text-brand-primaryText">
+              <UserCheck className="w-3.5 h-3.5 text-brand-success" />
+              <span>{telemetry.camera.humanDetection?.detected ? 'Human Detected' : 'Sector Clear'}</span>
             </div>
-            <span className="text-[10px] text-brand-secondaryText">{telemetry.dustCleaner.blowerRpm} RPM // AUTO</span>
+            <span className="text-[10px] text-brand-secondaryText">Edge MobileNet v2 Model</span>
           </div>
-          <span className="text-xs text-brand-warning font-semibold">{telemetry.dustCleaner.filterLifePercent}% HEPA</span>
+          <Link href="/dashboard/vision" className="text-brand-accent hover:underline text-[11px]">View</Link>
         </div>
       </div>
 
@@ -353,18 +353,6 @@ export default function DashboardOverviewPage() {
 
         </div>
 
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 6. DUSTCLEANER DETAILED WIDGET                                             */}
-      {/* ========================================================================= */}
-      <div>
-        <DustCleanerCard 
-          status={telemetry.dustCleaner.status}
-          mode={telemetry.dustCleaner.mode}
-          pm25={telemetry.pm25.value}
-          pm10={telemetry.pm10.value}
-        />
       </div>
 
     </div>

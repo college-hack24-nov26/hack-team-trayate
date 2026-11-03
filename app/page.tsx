@@ -4,7 +4,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import DustCleanerCard from '@/components/DustCleanerCard';
 import MagicRings from '@/components/MagicRings';
 import { 
   ArrowRight, 
@@ -12,6 +11,7 @@ import {
   ShieldCheck, 
   Wind, 
   Scan, 
+  Radar, 
   Filter, 
   Activity, 
   Cpu, 
@@ -248,11 +248,11 @@ export default function LandingPage() {
 
               <div className="flex items-center gap-2.5">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="inline-flex rounded-full h-2.5 w-2.5 bg-brand-warning"></span>
+                  <span className="inline-flex rounded-full h-2.5 w-2.5 bg-brand-accent"></span>
                 </span>
                 <div className="flex flex-col">
-                  <span className="text-brand-secondaryText text-[10px]">DustCleaner</span>
-                  <span className="font-bold text-brand-warning tracking-wider">{telemetry.dustCleaner.status}</span>
+                  <span className="text-brand-secondaryText text-[10px]">AI Vision</span>
+                  <span className="font-bold text-brand-accent tracking-wider">ACTIVE</span>
                 </div>
               </div>
 
@@ -340,25 +340,25 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Card 3: Smart Dust Mitigation */}
+          {/* Card 3: Obstacle Ranging & Turret Scanner */}
           <div className="bg-brand-card border border-brand-border rounded-xl p-6 flex flex-col justify-between hover:border-brand-accent/50 transition-all duration-300">
             <div>
               <div className="w-12 h-12 rounded-lg bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent mb-6">
-                <Filter className="w-6 h-6" />
+                <Radar className="w-6 h-6" />
               </div>
-              <div className="font-mono text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
-                03 // ACTIVE FILTRATION
+              <div className="text-[10px] text-brand-accent font-semibold uppercase tracking-widest mb-1">
+                03 // OBSTACLE SCANNING
               </div>
               <h3 className="text-xl font-bold text-brand-primaryText mb-3">
-                Smart Dust Mitigation
+                Ultrasonic Servo Scanner
               </h3>
               <p className="text-sm text-brand-secondaryText leading-relaxed">
-                Integrated DustCleaner system designed to capture airborne coal dust using an automated filtration mechanism, preventing combustion risks.
+                HC-SR04 ultrasonic distance sensor mounted on a 180° pan servo scanner providing real-time obstacle telemetry and collision deadbands.
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-brand-border/60 font-mono text-xs flex justify-between items-center">
-              <span className="text-brand-secondaryText">Particulate Trap</span>
-              <span className="text-brand-warning font-semibold">HEPA Auto-Purge</span>
+            <div className="mt-6 pt-4 border-t border-brand-border/60 text-xs flex justify-between items-center">
+              <span className="text-brand-secondaryText">Obstacle Distance</span>
+              <span className="text-brand-success font-semibold">180° Sweep Active</span>
             </div>
           </div>
 
@@ -599,33 +599,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* DUSTCLEANER SHOWCASE SECTION                                             */}
-      {/* ========================================================================= */}
-      <section className="py-20 bg-brand-secondary border-y border-brand-border relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-left mb-10 space-y-2">
-            <div className="font-mono text-xs font-semibold tracking-wider text-brand-warning uppercase">
-              PROPRIETARY EXPLOSION MITIGATION
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-brand-primaryText tracking-tight">
-              Integrated DustCleaner System
-            </h2>
-            <p className="text-brand-secondaryText text-base max-w-2xl">
-              Airborne coal aerosol represents a premier combustible trigger in post-disaster mine corridors. T-Rover integrates an active cyclonic filtration core to clean the air before human search crews deploy.
-            </p>
-          </div>
-
-          {/* DustCleaner Live Widget */}
-          <DustCleanerCard 
-            status={telemetry.dustCleaner.status}
-            mode={telemetry.dustCleaner.mode}
-            pm25={telemetry.pm25.value}
-            pm10={telemetry.pm10.value}
-          />
         </div>
       </section>
 

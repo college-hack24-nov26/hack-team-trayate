@@ -35,7 +35,7 @@ export default function AboutPage() {
               Mining disasters—ranging from explosive methane accumulation, coal dust firestorms, to structural tunnel collapses—frequently trap workers in toxic, zero-oxygen atmospheres.
             </p>
             <p className="text-brand-secondaryText text-sm sm:text-base leading-relaxed">
-              Traditional first-responder teams face extreme mortality risks attempting reconnaissance blind. TRAYATE was founded to send intelligent, explosion-proof rovers first—providing continuous environmental intelligence, locating survivors, and actively scrubbing airborne coal dust.
+              Traditional first-responder teams face extreme mortality risks attempting reconnaissance blind. TRAYATE was founded to send intelligent, explosion-proof rovers first—providing continuous environmental intelligence, locating survivors with real-time AI vision, and mapping sub-surface hazards.
             </p>
           </div>
 

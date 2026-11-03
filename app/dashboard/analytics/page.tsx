@@ -30,19 +30,19 @@ export default function AnalyticsPage() {
 
   // Multi-day analytics data
   const multiDayGasTrend = [
-    { date: 'Oct 28', ch4Measured: 0.12, ch4Predicted: 0.13, temp: 23.4, uptimeHrs: 18.2, dustReduction: 74 },
-    { date: 'Oct 29', ch4Measured: 0.14, ch4Predicted: 0.15, temp: 23.8, uptimeHrs: 19.5, dustReduction: 78 },
-    { date: 'Oct 30', ch4Measured: 0.11, ch4Predicted: 0.12, temp: 24.1, uptimeHrs: 22.0, dustReduction: 75 },
-    { date: 'Oct 31', ch4Measured: 0.28, ch4Predicted: 0.32, temp: 24.5, uptimeHrs: 16.4, dustReduction: 81 },
-    { date: 'Nov 01', ch4Measured: 0.19, ch4Predicted: 0.20, temp: 24.2, uptimeHrs: 20.8, dustReduction: 79 },
-    { date: 'Nov 02', ch4Measured: 0.13, ch4Predicted: 0.14, temp: 24.0, uptimeHrs: 23.1, dustReduction: 76 },
-    { date: 'Nov 03', ch4Measured: 0.12, ch4Predicted: 0.13, temp: 24.2, uptimeHrs: 23.8, dustReduction: 77 },
+    { date: 'Oct 28', ch4Measured: 0.12, ch4Predicted: 0.13, temp: 23.4, uptimeHrs: 18.2, pingMs: 14 },
+    { date: 'Oct 29', ch4Measured: 0.14, ch4Predicted: 0.15, temp: 23.8, uptimeHrs: 19.5, pingMs: 12 },
+    { date: 'Oct 30', ch4Measured: 0.11, ch4Predicted: 0.12, temp: 24.1, uptimeHrs: 22.0, pingMs: 15 },
+    { date: 'Oct 31', ch4Measured: 0.28, ch4Predicted: 0.32, temp: 24.5, uptimeHrs: 16.4, pingMs: 18 },
+    { date: 'Nov 01', ch4Measured: 0.19, ch4Predicted: 0.20, temp: 24.2, uptimeHrs: 20.8, pingMs: 13 },
+    { date: 'Nov 02', ch4Measured: 0.13, ch4Predicted: 0.14, temp: 24.0, uptimeHrs: 23.1, pingMs: 11 },
+    { date: 'Nov 03', ch4Measured: 0.12, ch4Predicted: 0.13, temp: 24.2, uptimeHrs: 23.8, pingMs: 12 },
   ];
 
   const handleExport = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + "Date,CH4_Measured,CH4_Predicted,Ambient_Temp,Uptime_Hours,Dust_Reduction_Percent\n"
-      + multiDayGasTrend.map(e => `${e.date},${e.ch4Measured},${e.ch4Predicted},${e.temp},${e.uptimeHrs},${e.dustReduction}`).join("\n");
+      + "Date,CH4_Measured,CH4_Predicted,Ambient_Temp,Uptime_Hours,Latency_Ping_Ms\n"
+      + multiDayGasTrend.map(e => `${e.date},${e.ch4Measured},${e.ch4Predicted},${e.temp},${e.uptimeHrs},${e.pingMs}`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -110,9 +110,9 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="bg-brand-card border border-brand-border rounded-xl p-4">
-          <div className="font-mono text-[10px] text-brand-secondaryText">DUST SUPPRESSION EFF.</div>
-          <div className="font-mono text-2xl font-bold text-brand-warning mt-1">77.1% <span className="text-xs font-normal text-brand-secondaryText">DROP</span></div>
-          <div className="text-[10px] font-mono text-brand-secondaryText mt-1">DustCleaner Cyclonic Trap</div>
+          <div className="text-[11px] font-medium text-brand-secondaryText uppercase tracking-wider">Edge AI Inference</div>
+          <div className="text-2xl font-bold text-brand-accent mt-1">24 ms <span className="text-xs font-normal text-brand-secondaryText">AVG</span></div>
+          <div className="text-xs text-brand-secondaryText mt-1">MobileNet v2 Vision Model</div>
         </div>
 
         <div className="bg-brand-card border border-brand-border rounded-xl p-4">

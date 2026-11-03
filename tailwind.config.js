@@ -26,8 +26,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-manrope)', 'Manrope', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-jetbrains-mono)', 'JetBrains Mono', 'monospace'],
+        sans: ['var(--font-sans)', 'Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-sans)', 'Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'cyan-subtle': '0 0 15px -2px rgba(56, 189, 248, 0.12)',

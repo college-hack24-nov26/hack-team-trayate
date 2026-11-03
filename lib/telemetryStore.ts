@@ -88,16 +88,6 @@ export interface TelemetryState {
     rollDeg: number;
     yawDeg: number;
   };
-  dustCleaner: {
-    status: 'ACTIVE' | 'STANDBY' | 'PURGING' | 'OFFLINE';
-    mode: 'AUTO' | 'MANUAL';
-    blowerRpm: number;
-    filterLifePercent: number;
-    airflowRate: number; // m3/h
-    efficiency: number; // %
-    beforeDustPM10: number;
-    afterDustPM10: number;
-  };
   rover: {
     connectivity: 'ONLINE' | 'OFFLINE' | 'DEGRADED';
     batteryPercent: number;
@@ -249,7 +239,7 @@ const initialTelemetry: TelemetryState = {
     maxSafe: 60,
   },
   pm10: {
-    label: 'Coarse Coal Dust (PM10)',
+    label: 'Air Particulates (PM10)',
     value: 64,
     unit: 'µg/m³',
     status: 'safe',
@@ -262,16 +252,6 @@ const initialTelemetry: TelemetryState = {
     pitchDeg: -1.4,
     rollDeg: 2.1,
     yawDeg: 278.0,
-  },
-  dustCleaner: {
-    status: 'STANDBY',
-    mode: 'AUTO',
-    blowerRpm: 3200,
-    filterLifePercent: 88,
-    airflowRate: 142,
-    efficiency: 94.6,
-    beforeDustPM10: 184,
-    afterDustPM10: 42,
   },
   rover: {
     connectivity: 'ONLINE',
@@ -590,27 +570,6 @@ export function useTelemetry() {
     }));
   }, []);
 
-  const toggleDustCleaner = useCallback(() => {
-    soundManager.playClickTone();
-    setTelemetry((prev) => ({
-      ...prev,
-      dustCleaner: {
-        ...prev.dustCleaner,
-        status: prev.dustCleaner.status === 'ACTIVE' ? 'STANDBY' : 'ACTIVE',
-      },
-    }));
-  }, []);
-
-  const setDustCleanerMode = useCallback((mode: 'AUTO' | 'MANUAL') => {
-    setTelemetry((prev) => ({
-      ...prev,
-      dustCleaner: {
-        ...prev.dustCleaner,
-        mode,
-      },
-    }));
-  }, []);
-
   const setHardwareMode = useCallback((mode: 'SIMULATOR' | 'LIVE_HARDWARE') => {
     soundManager.playClickTone();
     setTelemetry((prev) => ({
@@ -694,8 +653,6 @@ export function useTelemetry() {
     resetEStop,
     setSpeedGovernor,
     setMovementMode,
-    toggleDustCleaner,
-    setDustCleanerMode,
     setHardwareMode,
     setCameraUrl,
     setCameraStatus,

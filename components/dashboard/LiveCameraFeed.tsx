@@ -336,10 +336,10 @@ export default function LiveCameraFeed({
       ctx.lineTo(cx, cy + 10);
       ctx.stroke();
 
-      // Cybernetic Telemetry Tag Header
-      const labelText = `${person.label} [${person.confidence}% CONF]`;
-      const distText = `EST. DISTANCE: ${person.distanceMeters}m`;
-      ctx.font = 'bold 11px monospace';
+      // Target Telemetry Tag Header
+      const labelText = `${person.label} • ${person.confidence}%`;
+      const distText = `Distance: ${person.distanceMeters}m`;
+      ctx.font = '600 11px "Plus Jakarta Sans", "Inter", sans-serif';
       const textWidth = Math.max(ctx.measureText(labelText).width, ctx.measureText(distText).width);
       const tagHeight = 32;
       const tagY = Math.max(0, y - tagHeight - 4);
@@ -358,11 +358,11 @@ export default function LiveCameraFeed({
       ctx.restore();
     });
 
-    // Scanner Watermark overlay
+    // Scanner Status overlay
     ctx.save();
-    ctx.font = '10px monospace';
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
-    ctx.fillText(`AI MULTI-TARGET SURVIVOR DETECTION // TRACKING ${humans.length} ACTIVE TARGETS`, 12, height - 12);
+    ctx.font = '500 11px "Plus Jakarta Sans", "Inter", sans-serif';
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
+    ctx.fillText(`AI Vision • Tracking ${humans.length} active target${humans.length === 1 ? '' : 's'}`, 12, height - 12);
     ctx.restore();
   }, [humanDetectionActive]);
 

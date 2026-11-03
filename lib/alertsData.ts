@@ -6,7 +6,7 @@ export interface AlertItem {
     | 'High temperature'
     | 'Fire detected'
     | 'Smoke detected'
-    | 'High dust concentration'
+    | 'Obstacle proximity warning'
     | 'Low battery'
     | 'ESP32 disconnected'
     | 'MQTT connection failure'
@@ -42,19 +42,19 @@ export const initialAlerts: AlertItem[] = [
   },
   {
     id: 'ALT-1083',
-    category: 'High dust concentration',
+    category: 'Obstacle proximity warning',
     severity: 'warning',
     timestamp: '14 mins ago (13:52:00)',
     isoDate: '2026-11-03T13:52:00Z',
-    sourceDevice: 'ESP32-04 (DustCleaner)',
-    sensorInfo: 'PMS5003 Optical Dust Counter',
-    currentValue: '184 µg/m³ PM10',
+    sourceDevice: 'ESP32-01 (Ultrasonic Sensor)',
+    sensorInfo: 'HC-SR04 Ranging Transducer',
+    currentValue: '14.2 cm Clearance',
     missionId: 'TR-MIS-2026-084',
     acknowledged: true,
     acknowledgedBy: 'Safety Officer Dave M.',
     acknowledgedAt: '13:54:10',
     location: 'Conveyor Junction West',
-    description: 'Elevated airborne coal dust aerosol detected. DustCleaner automated cyclonic filtration triggered.',
+    description: 'Rubble obstruction detected ahead within 15cm deadband. Rover slow-crawl governor engaged.',
   },
   {
     id: 'ALT-1082',
@@ -158,7 +158,7 @@ export const initialAlerts: AlertItem[] = [
     severity: 'critical',
     timestamp: 'Yesterday (14:10:00)',
     isoDate: '2026-11-02T14:10:00Z',
-    sourceDevice: 'ESP32-04 (DustCleaner)',
+    sourceDevice: 'ESP32-02 (Motor Controller)',
     sensorInfo: 'Heartbeat Watchdog Timeout',
     currentValue: '0 packets in 3000ms',
     missionId: 'TR-MIS-2026-082',

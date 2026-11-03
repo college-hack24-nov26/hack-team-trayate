@@ -102,15 +102,15 @@ export default function TechnologyPage() {
 
             <div className="bg-brand-card border border-brand-border rounded-xl p-5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-xs text-brand-accent font-bold">LASER SCATTERING</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-secondary text-brand-warning border border-brand-border">PM2.5 / PM10</span>
+                <span className="font-mono text-xs text-brand-accent font-bold">ELECTROCHEMICAL / NDIR</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-secondary text-brand-warning border border-brand-border">MQ-135 SENSOR</span>
               </div>
-              <h3 className="font-bold text-base text-brand-primaryText">Air-Quality & Coal Dust</h3>
+              <h3 className="font-bold text-base text-brand-primaryText">Air Quality & Toxic Gases</h3>
               <p className="text-xs text-brand-secondaryText leading-relaxed">
-                Dual-channel laser scattering particle counter capturing suspended respirable and explosive coal aerosol density.
+                High-sensitivity MQ-135 air quality gas transducer monitoring smoke particulates, benzene, and toxic gases in sub-surface mine shafts.
               </p>
               <div className="text-[10px] font-mono text-brand-secondaryText pt-2 border-t border-brand-border">
-                THRESHOLD: 0 - 1000 µg/m³
+                STATUS: CONTINUOUS SAMPLING
               </div>
             </div>
 
@@ -191,17 +191,17 @@ export default function TechnologyPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-brand-success"></span>
-                  <span className="font-mono text-sm font-bold text-brand-primaryText">ESP32-04 — DustCleaner Filtration Controller</span>
+                  <span className="font-mono text-sm font-bold text-brand-primaryText">Surface Command Bridge & Telemetry Gateway</span>
                 </div>
-                <span className="text-xs font-mono text-brand-warning bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">ACTUATOR BUS</span>
+                <span className="text-xs font-mono text-brand-accent bg-brand-secondary px-2 py-0.5 rounded border border-brand-border">NETWORK NODE</span>
               </div>
               <p className="text-xs text-brand-secondaryText leading-relaxed mb-4">
-                Monitors dust accumulation differential pressure, governs brushless blower ESC speeds up to 6,000 RPM, and regulates automated cyclonic purge cycles.
+                Handles high-frequency bidirectional WebSocket and HTTP REST control dispatch between surface command consoles, ESP32 nodes, and live video streams.
               </p>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-brand-secondaryText pt-3 border-t border-brand-border/60">
-                <div>BLOWER: 180W Brushless</div>
-                <div>PRESSURE: BMP390</div>
-                <div>AIRFLOW: 142 m³/h</div>
+                <div>RTT: &lt;20ms</div>
+                <div>PROTOCOL: HTTP/WS</div>
+                <div>BANDWIDTH: 100Mbps</div>
               </div>
             </div>
 

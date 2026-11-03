@@ -263,9 +263,9 @@ export default function MissionMineMap() {
     ctx.restore();
 
     // Rover Label & Coordinates
-    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.font = '600 10px "Plus Jakarta Sans", "Inter", sans-serif';
     ctx.fillStyle = '#38BDF8';
-    ctx.fillText(`T-ROVER [${x}, ${y}]`, x - 30, y - 18);
+    ctx.fillText(`T-Rover [${x}, ${y}]`, x - 26, y - 18);
 
     ctx.restore();
   }, [telemetry.rover, pan, scale, tunnels, zones, obstacles]);

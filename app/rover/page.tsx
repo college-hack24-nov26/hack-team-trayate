@@ -4,7 +4,6 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Image from 'next/image';
 import Link from 'next/link';
-import DustCleanerCard from '@/components/DustCleanerCard';
 import { 
   ArrowUpRight, 
   Check, 
@@ -35,7 +34,7 @@ export default function RoverProductPage() {
     { label: 'Optical Camera', value: '1080p Low-Light HD Optical Turret (120° FOV)' },
     { label: 'Thermal Sensor', value: '32x24 Long-Wave Infrared (LWIR) False-Color Array' },
     { label: 'Gas Detection Channels', value: 'CH4, CO, CO2, O2, Barometric Pressure, Humidity' },
-    { label: 'Dust Mitigation', value: 'Integrated DustCleaner Cyclonic HEPA (142 m³/h)' },
+    { label: 'Ultrasonic Ranging', value: 'HC-SR04 Transducer on Pan/Tilt Servo Turret' },
   ];
 
   return (
@@ -55,7 +54,7 @@ export default function RoverProductPage() {
                 T-Rover Industrial Mine Rescue Robot
               </h1>
               <p className="text-brand-secondaryText text-base sm:text-lg leading-relaxed">
-                Engineered from the ground up for extreme durability in underground mining hazards. Equipped with four-wheel independent 4WD all-terrain drive, multi-gas sniffer array, and automated dust mitigation.
+                Engineered from the ground up for extreme durability in underground mining hazards. Equipped with four-wheel independent 4WD all-terrain drive, multi-gas sniffer array, and live IP camera with AI human detection.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-2">
                 <Link
@@ -149,12 +148,12 @@ export default function RoverProductPage() {
           </div>
 
           <div className="p-6 rounded-xl bg-brand-card border border-brand-border space-y-3">
-            <div className="w-10 h-10 rounded-lg bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-warning">
-              <Wind className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-lg bg-brand-secondary border border-brand-border flex items-center justify-center text-brand-accent">
+              <Cpu className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-brand-primaryText">Integrated DustCleaner Core</h3>
+            <h3 className="text-lg font-bold text-brand-primaryText">Ultrasonic Obstacle Scanner</h3>
             <p className="text-xs text-brand-secondaryText leading-relaxed">
-              High-volume cyclonic particulate separator traps airborne coal dust and respirable silica particles, reducing the explosive risk index along inspection corridors.
+              HC-SR04 ultrasonic sensor mounted on a 180° pan servo scanner detects rockfall debris and navigation obstacles in real time with millimeter accuracy.
             </p>
           </div>
 
@@ -170,19 +169,6 @@ export default function RoverProductPage() {
 
         </div>
 
-      </section>
-
-      {/* DustCleaner Embedded Section */}
-      <section className="py-16 bg-brand-secondary border-y border-brand-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          <div className="max-w-2xl space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold text-brand-primaryText">Active Dust Suppression Core</h2>
-            <p className="text-brand-secondaryText text-sm">
-              Real-time demonstration of the on-rover filtration module.
-            </p>
-          </div>
-          <DustCleanerCard />
-        </div>
       </section>
 
       {/* Specifications Table */}

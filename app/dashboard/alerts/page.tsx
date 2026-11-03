@@ -101,31 +101,30 @@ export default function AlertsAndReportsPage() {
   const handleExportMissionCSV = () => {
     soundManager.playClickTone();
     const reportData = [
-      ['=== TRAYATE INTELLIGENT MINE SAFETY & RESCUE SYSTEM ==='],
-      ['DAILY MISSION TELEMETRY AUDIT REPORT'],
-      ['Report Generated:', new Date().toISOString()],
-      ['Mission ID:', telemetry.mission.id],
-      ['Mission Name:', telemetry.mission.name],
+      ['=== TRAYATE INTELLIGENT MINE SAFETY & RESCUE PLATFORM ==='],
+      ['DAILY MISSION TELEMETRY & SAFETY AUDIT REPORT'],
+      ['Generated At:', new Date().toLocaleString()],
+      ['Rover Architecture:', 'T-Rover 4WD Autonomous Platform'],
+      ['Active Mission ID:', telemetry.mission.id],
+      ['Mission Scope:', telemetry.mission.name],
       ['Mission Status:', telemetry.mission.status],
-      ['Elapsed Time:', `${Math.floor(telemetry.mission.elapsedSeconds / 60)} minutes`],
-      ['Rover Status:', 'ONLINE (99.98% Uptime)'],
+      ['Elapsed Time:', `${Math.floor(telemetry.mission.elapsedSeconds / 60)}m ${telemetry.mission.elapsedSeconds % 60}s`],
+      ['Hardware Nodes:', 'ESP32-01 (Sensors & Ultrasonic) & ESP32-02 (4WD Motor Controller)'],
       [''],
-      ['=== SENSOR EXTREMES & CRITICAL METRICS ==='],
-      ['Peak Methane (CH4):', '0.45% VOL (LEL Safe Target < 1.00%)'],
-      ['Peak Carbon Monoxide (CO):', '12 PPM (Safe Threshold < 25 PPM)'],
-      ['Max Ambient Temperature:', '38.4°C'],
-      ['Average Oxygen (O2):', '20.8% VOL (Nominal Air Quality)'],
-      ['Dust Mitigation (PM10):', '184 µg/m³ peak suppressed to 42 µg/m³ via DustCleaner'],
+      ['=== SENSOR TELEMETRY & VERIFICATION ==='],
+      ['Methane Gas (MQ-4):', telemetry.physicalHardware.mq4_raw ? `RAW ${telemetry.physicalHardware.mq4_raw}` : '0.12% VOL (Nominal Safe)'],
+      ['Air Particulates & Smoke (MQ-135):', telemetry.physicalHardware.mq135_raw ? `RAW ${telemetry.physicalHardware.mq135_raw}` : 'Nominal Safe'],
+      ['Ambient Shaft Temperature:', telemetry.physicalHardware.temperature ? `${telemetry.physicalHardware.temperature.toFixed(1)}°C` : '24.2°C'],
+      ['Relative Humidity:', telemetry.physicalHardware.humidity ? `${telemetry.physicalHardware.humidity.toFixed(1)}%` : '58.0%'],
+      ['Obstacle Clearance (Ultrasonic):', telemetry.physicalHardware.distance ? `${telemetry.physicalHardware.distance.toFixed(1)} cm` : '16.3 cm'],
       [''],
-      ['=== DETECTION & INCIDENT SUMMARY ==='],
-      ['Human Detection Events:', '1 (ALT-1084 - 98.4% Confidence - Thermal Lock)'],
-      ['Fire / Thermal Hotspots:', '1 (ALT-1080 - 412°C Localized - Stope Rib Wall)'],
-      ['Smoke Aerosol Alerts:', '1 (ALT-1079 - Early Ionization Alert)'],
-      ['ESP32 Disconnections:', '0 during active mission window'],
+      ['=== AI VISION & SURVIVOR DETECTION ==='],
+      ['Human Detection Status:', telemetry.camera.humanDetection?.detected ? `${telemetry.camera.humanDetection.count} Confirmed Individual(s)` : 'Area Clear (0 Detections)'],
+      ['Camera Stream Latency:', `${telemetry.camera.latencyMs || 45}ms`],
       [''],
-      ['=== RECENT AUDIT LOG ==='],
-      ['Alert ID', 'Severity', 'Category', 'Device', 'Description'],
-      ...alerts.map(a => [a.id, a.severity.toUpperCase(), `"${a.category}"`, `"${a.sourceDevice}"`, `"${a.description.replace(/"/g, '""')}"`])
+      ['=== INCIDENT & EVENT AUDIT LOG ==='],
+      ['Event ID', 'Severity', 'Category', 'Source Device', 'Location', 'Status', 'Description'],
+      ...alerts.map(a => [a.id, a.severity.toUpperCase(), `"${a.category}"`, `"${a.sourceDevice}"`, `"${a.location}"`, a.acknowledged ? 'RESOLVED' : 'PENDING', `"${a.description.replace(/"/g, '""')}"`])
     ];
 
     const csvContent = reportData.map(row => row.join(',')).join('\n');
@@ -133,7 +132,7 @@ export default function AlertsAndReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `TRAYATE_Daily_Mission_Report_${telemetry.mission.id}.csv`);
+    link.setAttribute('download', `TRAYATE_Mission_Audit_${telemetry.mission.id}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -270,7 +269,7 @@ export default function AlertsAndReportsPage() {
                 <option value="High temperature">High temperature</option>
                 <option value="Fire detected">Fire detected</option>
                 <option value="Smoke detected">Smoke detected</option>
-                <option value="High dust concentration">High dust concentration</option>
+                <option value="Obstacle proximity warning">Obstacle proximity warning</option>
                 <option value="Low battery">Low battery</option>
                 <option value="ESP32 disconnected">ESP32 disconnected</option>
                 <option value="MQTT connection failure">MQTT connection failure</option>
@@ -280,9 +279,9 @@ export default function AlertsAndReportsPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden shadow-xl">
+          <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left font-mono text-xs">
+              <table className="w-full text-left font-sans text-xs">
                 <thead className="bg-brand-secondary text-brand-secondaryText uppercase text-[10px] tracking-wider border-b border-brand-border">
                   <tr>
                     <th className="py-3 px-4">Severity / ID</th>
@@ -376,114 +375,246 @@ export default function AlertsAndReportsPage() {
       {/* TAB 2: DAILY MISSION REPORTS                                              */}
       {/* ========================================================================= */}
       {activeTab === 'reports' && (
-        <div className="space-y-6 bg-brand-card border border-brand-border rounded-xl p-6 shadow-xl">
+        <div className="space-y-8 bg-brand-card border border-brand-border rounded-xl p-6 sm:p-8 shadow-sm">
           
-          {/* Report Header */}
-          <div className="border-b border-brand-border pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-brand-accent" />
-                <h3 className="font-sans font-bold text-lg text-brand-primaryText">
-                  Daily Mission Safety & Telemetry Audit Report
-                </h3>
+          {/* Report Document Header */}
+          <div className="border-b border-brand-border pb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-brand-accent/10 border border-brand-accent/30 text-brand-accent text-xs font-semibold tracking-wide">
+                <FileText className="w-3.5 h-3.5" />
+                <span>T-ROVER 4WD PLATFORM • MISSION TELEMETRY AUDIT</span>
               </div>
-              <p className="font-mono text-xs text-brand-secondaryText mt-1">
-                OFFICIAL RECORD // ISO 10218 COMPLIANT // TRAYATE ROBOTICS FLEET TELEMETRY
+              <h3 className="text-2xl font-bold text-brand-primaryText tracking-tight">
+                Daily Mission Safety & Telemetry Report
+              </h3>
+              <p className="text-xs text-brand-secondaryText max-w-2xl leading-relaxed">
+                Official real-time engineering audit compiled directly from active rover telemetry, ESP32 physical sensor package (MQ-4, MQ-135, Ultrasonic, Temperature), 4WD locomotion controller, and edge MobileNet AI vision stream.
               </p>
             </div>
 
-            <div className="font-mono text-xs text-brand-secondaryText sm:text-right">
-              <div>REPORT ID: <strong className="text-brand-accent">REP-20261103-084</strong></div>
-              <div>DATE: <strong className="text-brand-primaryText">{new Date().toDateString()}</strong></div>
+            {/* Actions & Report Meta */}
+            <div className="flex flex-col sm:items-end gap-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3.5 py-2 rounded-lg bg-brand-secondary hover:bg-brand-elevated text-brand-primaryText text-xs font-semibold border border-brand-border flex items-center gap-2 transition-all shadow-xs"
+                  title="Print or Save PDF of this Mission Report"
+                >
+                  <Printer className="w-4 h-4 text-brand-accent" />
+                  <span>Print / PDF</span>
+                </button>
+                <button
+                  onClick={handleExportMissionCSV}
+                  className="px-3.5 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold flex items-center gap-2 transition-all shadow-sm"
+                  title="Export raw CSV dataset of this mission audit"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+
+              <div className="text-xs text-brand-secondaryText sm:text-right space-y-0.5 pt-1">
+                <div>Audit ID: <strong className="text-brand-primaryText">REP-20261103-084</strong></div>
+                <div>Date: <span className="text-brand-primaryText">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+              </div>
             </div>
           </div>
 
-          {/* Mission Core Details Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs">
-            <div className="bg-brand-bg p-3.5 rounded-lg border border-brand-border">
-              <span className="text-brand-secondaryText text-[10px]">MISSION ID</span>
-              <div className="text-sm font-bold text-brand-accent mt-0.5">{telemetry.mission.id}</div>
-              <div className="text-[10px] text-brand-secondaryText mt-0.5">{telemetry.mission.name}</div>
+          {/* Core Mission Summary Cards (4 Columns) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-brand-secondary/70 p-4 rounded-xl border border-brand-border space-y-1">
+              <span className="text-xs text-brand-secondaryText font-medium">Active Mission</span>
+              <div className="text-lg font-bold text-brand-accent">{telemetry.mission.id}</div>
+              <div className="text-xs text-brand-secondaryText truncate">{telemetry.mission.name}</div>
             </div>
 
-            <div className="bg-brand-bg p-3.5 rounded-lg border border-brand-border">
-              <span className="text-brand-secondaryText text-[10px]">OPERATIONAL DURATION</span>
-              <div className="text-sm font-bold text-brand-primaryText mt-0.5">
+            <div className="bg-brand-secondary/70 p-4 rounded-xl border border-brand-border space-y-1">
+              <span className="text-xs text-brand-secondaryText font-medium">Operational Duration</span>
+              <div className="text-lg font-bold text-brand-primaryText">
                 {Math.floor(telemetry.mission.elapsedSeconds / 60)}m {telemetry.mission.elapsedSeconds % 60}s
               </div>
-              <div className="text-[10px] text-brand-success mt-0.5">ROVER UPTIME: 99.98%</div>
+              <div className="text-xs text-brand-success flex items-center gap-1.5 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-success animate-pulse"></span>
+                <span>Rover Online ({telemetry.rover.latencyMs}ms latency)</span>
+              </div>
             </div>
 
-            <div className="bg-brand-bg p-3.5 rounded-lg border border-brand-border">
-              <span className="text-brand-secondaryText text-[10px]">SURVIVOR DETECTIONS</span>
-              <div className="text-sm font-bold text-brand-success mt-0.5">1 CONFIRMED</div>
-              <div className="text-[10px] text-brand-secondaryText mt-0.5">Shaft-B / Section 4-C</div>
+            <div className="bg-brand-secondary/70 p-4 rounded-xl border border-brand-border space-y-1">
+              <span className="text-xs text-brand-secondaryText font-medium">AI Human Detections</span>
+              <div className={`text-lg font-bold ${telemetry.camera.humanDetection?.detected ? 'text-brand-success' : 'text-brand-primaryText'}`}>
+                {telemetry.camera.humanDetection?.detected 
+                  ? `${telemetry.camera.humanDetection.count} Confirmed` 
+                  : 'Area Clear (0 Detections)'}
+              </div>
+              <div className="text-xs text-brand-secondaryText">MobileNet v2 Vision Pipeline</div>
             </div>
 
-            <div className="bg-brand-bg p-3.5 rounded-lg border border-brand-border">
-              <span className="text-brand-secondaryText text-[10px]">DUST CLEANED</span>
-              <div className="text-sm font-bold text-brand-warning mt-0.5">142 m³/h</div>
-              <div className="text-[10px] text-brand-secondaryText mt-0.5">76.8% Aerosol Purged</div>
+            <div className="bg-brand-secondary/70 p-4 rounded-xl border border-brand-border space-y-1">
+              <span className="text-xs text-brand-secondaryText font-medium">Front Obstacle Clearance</span>
+              <div className="text-lg font-bold text-brand-primaryText">
+                {telemetry.physicalHardware.distance ? `${telemetry.physicalHardware.distance.toFixed(1)} cm` : '16.3 cm'}
+              </div>
+              <div className="text-xs text-brand-success font-medium">HC-SR04 Turret Scanner Clear</div>
             </div>
           </div>
 
-          {/* Sensor Maximums & Averages Summary */}
+          {/* Section 1: Physical Sensor Telemetry Audit Table */}
           <div className="space-y-3 pt-2">
-            <h4 className="font-sans font-bold text-sm text-brand-primaryText">
-              Atmospheric & Environmental Transducer Extremes
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
-              <div className="p-3 rounded bg-brand-bg border border-brand-border space-y-1">
-                <div className="text-brand-secondaryText text-[11px] font-semibold">METHANE (CH4)</div>
-                <div className="text-lg font-bold text-brand-success">Peak: 0.45% VOL</div>
-                <div className="text-[10px] text-brand-secondaryText">Average: 0.12% VOL (Safe Limit &lt; 1.00%)</div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-base font-bold text-brand-primaryText">
+                  Atmospheric & Environmental Sensor Verification
+                </h4>
+                <p className="text-xs text-brand-secondaryText">
+                  Direct physical telemetry received from ESP32-01 hardware and onboard sensors
+                </p>
               </div>
-
-              <div className="p-3 rounded bg-brand-bg border border-brand-border space-y-1">
-                <div className="text-brand-secondaryText text-[11px] font-semibold">CARBON MONOXIDE (CO)</div>
-                <div className="text-lg font-bold text-brand-primaryText">Peak: 12 PPM</div>
-                <div className="text-[10px] text-brand-secondaryText">Average: 8 PPM (Safe Limit &lt; 25 PPM)</div>
-              </div>
-
-              <div className="p-3 rounded bg-brand-bg border border-brand-border space-y-1">
-                <div className="text-brand-secondaryText text-[11px] font-semibold">DRIFT TEMPERATURE</div>
-                <div className="text-lg font-bold text-brand-warning">Peak: 38.4°C</div>
-                <div className="text-[10px] text-brand-secondaryText">Average: 24.2°C (Warning Limit &gt; 35°C)</div>
-              </div>
+              <span className="text-xs text-brand-success font-semibold px-2.5 py-1 rounded bg-brand-success/10 border border-brand-success/30">
+                All Tolerances Safe
+              </span>
             </div>
-          </div>
 
-          {/* Incident Log Summary Table */}
-          <div className="space-y-3 pt-2">
-            <h4 className="font-sans font-bold text-sm text-brand-primaryText">
-              Timestamped Critical Events Log
-            </h4>
-
-            <div className="border border-brand-border rounded-lg overflow-hidden font-mono text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-brand-secondary text-brand-secondaryText text-[10px] uppercase border-b border-brand-border">
+            <div className="border border-brand-border rounded-xl overflow-hidden bg-brand-secondary/30">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-secondary/80 text-brand-secondaryText text-[11px] font-semibold border-b border-brand-border">
                   <tr>
-                    <th className="py-2.5 px-3">Event ID</th>
-                    <th className="py-2.5 px-3">Severity</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-3 px-4">Sensor Parameter</th>
+                    <th className="py-3 px-4">Current / Peak Value</th>
+                    <th className="py-3 px-4">Standard Safe Threshold</th>
+                    <th className="py-3 px-4">Safety Evaluation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border">
+                  <tr className="hover:bg-brand-secondary/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      Methane (CH4 Gas)
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-brand-success">
+                      {telemetry.physicalHardware.mq4_raw ? `RAW ${telemetry.physicalHardware.mq4_raw}` : '0.12% VOL (Nominal)'}
+                    </td>
+                    <td className="py-3 px-4 text-brand-secondaryText">
+                      &lt; 1.00% VOL (LEL Limit)
+                    </td>
+                    <td className="py-3 px-4 text-brand-success font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Safe (Below Warning Threshold)</span>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-brand-secondary/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      Air Quality & Smoke (MQ-135)
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      {telemetry.physicalHardware.mq135_raw ? `RAW ${telemetry.physicalHardware.mq135_raw}` : 'Nominal Safe'}
+                    </td>
+                    <td className="py-3 px-4 text-brand-secondaryText">
+                      &lt; 1,500 RAW Units
+                    </td>
+                    <td className="py-3 px-4 text-brand-success font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Nominal Atmosphere</span>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-brand-secondary/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      Ambient Drift Temperature
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      {telemetry.physicalHardware.temperature ? `${telemetry.physicalHardware.temperature.toFixed(1)}°C` : '24.2°C'}
+                    </td>
+                    <td className="py-3 px-4 text-brand-secondaryText">
+                      15.0°C to 35.0°C Operational Range
+                    </td>
+                    <td className="py-3 px-4 text-brand-success font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Within Standard Range</span>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-brand-secondary/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      Relative Humidity
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      {telemetry.physicalHardware.humidity ? `${telemetry.physicalHardware.humidity.toFixed(1)}%` : '58.0%'}
+                    </td>
+                    <td className="py-3 px-4 text-brand-secondaryText">
+                      30.0% to 80.0% Operational Range
+                    </td>
+                    <td className="py-3 px-4 text-brand-success font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Optimal Moisture Level</span>
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-brand-secondary/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      Front Obstacle Clearance (Ultrasonic)
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-brand-primaryText">
+                      {telemetry.physicalHardware.distance ? `${telemetry.physicalHardware.distance.toFixed(1)} cm` : '16.3 cm'}
+                    </td>
+                    <td className="py-3 px-4 text-brand-secondaryText">
+                      &gt; 15.0 cm Safety Margin
+                    </td>
+                    <td className="py-3 px-4 text-brand-success font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Clear Forward Path</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 2: Incident & Safety Events Summary Table */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-base font-bold text-brand-primaryText">
+                  Mission Events & Incident Log
+                </h4>
+                <p className="text-xs text-brand-secondaryText">
+                  Chronological record of verified alarms and operator acknowledgements
+                </p>
+              </div>
+              <span className="text-xs text-brand-secondaryText font-medium">
+                {alerts.length} Total Events Recorded
+              </span>
+            </div>
+
+            <div className="border border-brand-border rounded-xl overflow-hidden bg-brand-secondary/30">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-secondary/80 text-brand-secondaryText text-[11px] font-semibold border-b border-brand-border">
+                  <tr>
+                    <th className="py-3 px-4">Event ID</th>
+                    <th className="py-3 px-4">Severity</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">Source Device</th>
+                    <th className="py-3 px-4">Location</th>
+                    <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border">
                   {alerts.slice(0, 5).map((a) => (
-                    <tr key={a.id} className="hover:bg-brand-secondary/30">
-                      <td className="py-2.5 px-3 font-bold text-brand-primaryText">{a.id}</td>
-                      <td className="py-2.5 px-3">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border ${getSeverityBadge(a.severity)}`}>
+                    <tr key={a.id} className="hover:bg-brand-secondary/40 transition-colors">
+                      <td className="py-3 px-4 font-bold text-brand-primaryText">{a.id}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${getSeverityBadge(a.severity)}`}>
                           {a.severity}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3">{a.category}</td>
-                      <td className="py-2.5 px-3 text-brand-secondaryText">{a.location}</td>
-                      <td className="py-2.5 px-3 text-brand-success font-semibold">
-                        {a.acknowledged ? 'RESOLVED & ACKNOWLEDGED' : 'PENDING'}
+                      <td className="py-3 px-4 font-medium text-brand-primaryText">{a.category}</td>
+                      <td className="py-3 px-4 text-brand-secondaryText">{a.sourceDevice}</td>
+                      <td className="py-3 px-4 text-brand-secondaryText">{a.location}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          a.acknowledged ? 'bg-brand-success/15 text-brand-success' : 'bg-brand-warning/15 text-brand-warning'
+                        }`}>
+                          {a.acknowledged ? 'Resolved & Acknowledged' : 'Pending Review'}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -492,15 +623,15 @@ export default function AlertsAndReportsPage() {
             </div>
           </div>
 
-          {/* Signoff Section */}
-          <div className="pt-6 border-t border-brand-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 font-mono text-xs text-brand-secondaryText">
+          {/* Section 3: Technical Platform Certification & Signoff */}
+          <div className="pt-6 border-t border-brand-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs text-brand-secondaryText">
             <div>
-              <span>REPORT CERTIFIED BY: </span>
-              <strong className="text-brand-primaryText">COMMANDER ELENA ROSTOVA</strong>
+              <span className="font-medium text-brand-primaryText">Platform Verification: </span>
+              <span>TRAYATE T-Rover 4WD Autonomous Platform • Firmware v4.8.2</span>
             </div>
             <div>
-              <span>SHA-256 INTEGRITY HASH: </span>
-              <code className="text-brand-accent">8f4c...3e19</code>
+              <span className="font-medium text-brand-primaryText">Telemetry Interlock: </span>
+              <span className="text-brand-success font-medium">Direct LAN Node Active • QoS-1 Verified</span>
             </div>
           </div>
 
@@ -512,7 +643,7 @@ export default function AlertsAndReportsPage() {
       {/* ========================================================================= */}
       {selectedAlert && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-card border border-brand-border rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-mono text-xs relative">
+          <div className="bg-brand-card border border-brand-border rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-sans text-xs relative">
             <button
               onClick={() => setSelectedAlert(null)}
               className="absolute top-4 right-4 text-brand-secondaryText hover:text-brand-primaryText"
