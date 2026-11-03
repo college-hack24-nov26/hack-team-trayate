@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import DustCleanerCard from '@/components/DustCleanerCard';
+import MagicRings from '@/components/MagicRings';
 import { 
   ArrowRight, 
   ArrowUpRight, 
@@ -38,6 +39,30 @@ export default function LandingPage() {
       {/* ========================================================================= */}
       <section className="relative min-h-[calc(100vh-5rem)] flex items-center justify-center pt-8 pb-16 lg:py-20 bg-tech-grid overflow-hidden">
         
+        {/* MagicRings Interactive WebGL Particle Background */}
+        <div className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-hidden flex items-center justify-center">
+          <div className="w-[1250px] h-[850px] max-w-full max-h-full relative opacity-70">
+            <MagicRings
+              color="#38BDF8"
+              colorTwo="#0EA5E9"
+              motion="pulse"
+              ringCount={6}
+              speed={0.8}
+              lineThickness={1.8}
+              glow={1.4}
+              hoverScale={1.18}
+              hoverIntensity={1.2}
+              clickBurst={true}
+              followMouse={true}
+              mouseInfluence={0.12}
+              parallax={0.05}
+              tilt={-10}
+              opacity={0.7}
+              theme="dark"
+            />
+          </div>
+        </div>
+
         {/* Subtle Restrained Ambient Cyan Glow Field */}
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[350px] bg-brand-accent/8 rounded-full blur-[140px] pointer-events-none"></div>
 
