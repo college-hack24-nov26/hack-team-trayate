@@ -119,3 +119,4 @@ begin;
     public.human_detections, 
     public.mission_alerts;
 commit;
+
