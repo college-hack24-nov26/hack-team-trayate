@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Camera, 
-  Wifi, 
   WifiOff, 
   Maximize2, 
   Minimize2, 
@@ -15,11 +14,11 @@ import {
   Square,
   ExternalLink,
   Flame,
-  Radio,
   UserCheck,
   UserX,
-  AlertTriangle,
-  Scan
+  Scan,
+  Users,
+  BellOff
 } from 'lucide-react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { soundManager } from '@/lib/soundAlerts';
@@ -30,7 +29,25 @@ interface DetectedHuman {
   distanceMeters: number;
   id: number;
   label: string;
+  color: string;
 }
+
+interface ActiveHumanAlert {
+  type: 'SINGLE' | 'MULTIPLE';
+  count: number;
+  message: string;
+  confidence: number;
+  nearestDistance: number;
+  timestamp: string;
+}
+
+const HUMAN_COLORS = [
+  '#22C55E', // Green (Target 1)
+  '#38BDF8', // Cyan (Target 2)
+  '#F59E0B', // Amber (Target 3)
+  '#A855F7', // Purple (Target 4)
+  '#EC4899', // Pink (Target 5)
+];
 
 export default function LiveCameraFeed() {
   const { telemetry, setCameraUrl, setCameraStatus, setHumanDetection, toggleHumanDetection } = useTelemetry();
@@ -51,16 +68,27 @@ export default function LiveCameraFeed() {
   // Live Performance Metrics
   const [fps, setFps] = useState<number>(0);
   const [frameLatency, setFrameLatency] = useState<number>(45);
+  const [inferenceLatency, setInferenceLatency] = useState<number>(24);
   const [lastFrameTime, setLastFrameTime] = useState<string>('Ready');
   const [resPreset, setResPreset] = useState<'640x480' | '800x480' | '1280x720'>('640x480');
 
   // AI Human Detection State
   const [humanDetectionActive, setHumanDetectionActive] = useState<boolean>(true);
   const [detectedHumans, setDetectedHumans] = useState<DetectedHuman[]>([]);
-  const [modelStatus, setModelStatus] = useState<'LOADING' | 'READY' | 'ADAPTIVE_CV'>('LOADING');
-  const lastSoundAlertTimeRef = useRef<number>(0);
+  const [activeAlert, setActiveAlert] = useState<ActiveHumanAlert | null>(null);
+  const [isAlertAcknowledged, setIsAlertAcknowledged] = useState<boolean>(false);
+  const [modelStatus, setModelStatus] = useState<'LOADING' | 'READY' | 'STANDBY'>('LOADING');
+
+  // Decoupled refs for high-performance zero-lag rendering
+  const trackedHumansRef = useRef<DetectedHuman[]>([]);
+  const lastSeenHumanTimeRef = useRef<number>(0);
+  const isDetectingRef = useRef<boolean>(false);
+  const lastAlertedCountRef = useRef<number>(0);
+  const lastAlertTimestampRef = useRef<number>(0);
+  const isAcknowledgedRef = useRef<boolean>(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cocoModelRef = useRef<any>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(Date.now());
@@ -95,7 +123,7 @@ export default function LiveCameraFeed() {
     }
   }, [getBaseHost]);
 
-  // Dynamic Neural Network Loader (TensorFlow.js + COCO-SSD)
+  // Dynamic High-Accuracy Neural Network Loader (TensorFlow.js + MobileNet v2 COCO-SSD)
   useEffect(() => {
     let isCancelled = false;
 
@@ -128,7 +156,8 @@ export default function LiveCameraFeed() {
         if (isCancelled) return;
 
         if (win.cocoSsd) {
-          const loadedModel = await win.cocoSsd.load({ base: 'lite_mobilenet_v2' });
+          // Load MobileNet v2 for maximum human detection accuracy
+          const loadedModel = await win.cocoSsd.load({ base: 'mobilenet_v2' });
           if (!isCancelled) {
             cocoModelRef.current = loadedModel;
             setModelStatus('READY');
@@ -136,7 +165,7 @@ export default function LiveCameraFeed() {
         }
       } catch {
         if (!isCancelled) {
-          setModelStatus('ADAPTIVE_CV');
+          setModelStatus('STANDBY');
         }
       }
     };
@@ -148,8 +177,64 @@ export default function LiveCameraFeed() {
     };
   }, []);
 
-  // Computer Vision Bounding Box Overlay Renderer
-  const renderDetectionOverlays = useCallback((
+  // Process Alerts with Multi-Human Detection & Anti-Spam Debounce
+  const handleAlertDispatch = useCallback((humans: DetectedHuman[]) => {
+    const count = humans.length;
+
+    if (count === 0) {
+      lastAlertedCountRef.current = 0;
+      isAcknowledgedRef.current = false;
+      setIsAlertAcknowledged(false);
+      setActiveAlert(null);
+      setHumanDetection({
+        detected: false,
+        count: 0,
+        confidence: 0,
+        distanceEst: 0,
+      });
+      return;
+    }
+
+    const highestConfidence = Math.max(...humans.map((h) => h.confidence));
+    const nearestDist = Math.min(...humans.map((h) => h.distanceMeters));
+
+    setHumanDetection({
+      detected: true,
+      count,
+      confidence: highestConfidence,
+      distanceEst: nearestDist,
+    });
+
+    const now = Date.now();
+    const countChanged = count !== lastAlertedCountRef.current;
+    const timeSinceLastAlert = now - lastAlertTimestampRef.current;
+
+    // Build the visual alert banner
+    setActiveAlert({
+      type: count > 1 ? 'MULTIPLE' : 'SINGLE',
+      count,
+      message: count > 1 
+        ? `MULTIPLE HUMANS DETECTED [${count} PERSONS] // ACTIVE RESCUE ZONE` 
+        : `HUMAN LIFE DETECTED [1 PERSON] // SECTOR 4 VISUAL TARGET`,
+      confidence: highestConfidence,
+      nearestDistance: nearestDist,
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    // Anti-Spam Sound Alert Logic:
+    // 1. If human count changes (e.g. 0 -> 1, or 1 -> 2, or 2 -> 3), play alert immediately!
+    // 2. If same count remains, DO NOT SPAM! Silent while operator observes, with 30s gentle reminder.
+    if (countChanged || (!isAcknowledgedRef.current && timeSinceLastAlert > 30000)) {
+      lastAlertedCountRef.current = count;
+      lastAlertTimestampRef.current = now;
+      isAcknowledgedRef.current = false;
+      setIsAlertAcknowledged(false);
+      soundManager.playWarningAlert();
+    }
+  }, [setHumanDetection]);
+
+  // Fast Bounding Box Overlay Renderer (Runs synchronously with zero lag on frame draw)
+  const drawOverlaysOnCanvas = useCallback((
     ctx: CanvasRenderingContext2D, 
     humans: DetectedHuman[], 
     width: number, 
@@ -159,17 +244,18 @@ export default function LiveCameraFeed() {
 
     humans.forEach((person) => {
       const [x, y, w, h] = person.bbox;
-      const cornerLen = Math.max(12, Math.min(28, w * 0.2));
+      const cornerLen = Math.max(14, Math.min(26, w * 0.22));
+      const personColor = person.color || '#22C55E';
 
       ctx.save();
 
       // Cybernetic High-Visibility Targeting Box
-      ctx.strokeStyle = '#22C55E';
+      ctx.strokeStyle = personColor;
       ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(34, 197, 94, 0.8)';
-      ctx.shadowBlur = 8;
+      ctx.shadowColor = personColor;
+      ctx.shadowBlur = 9;
 
-      // 4 Corner Brackets
+      // 4 Corner Targeting Brackets
       // Top-Left
       ctx.beginPath();
       ctx.moveTo(x, y + cornerLen);
@@ -198,8 +284,8 @@ export default function LiveCameraFeed() {
       ctx.lineTo(x + w, y + h - cornerLen);
       ctx.stroke();
 
-      // Subtle translucent fill to emphasize target
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.08)';
+      // Translucent target highlight
+      ctx.fillStyle = personColor === '#22C55E' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(56, 189, 248, 0.08)';
       ctx.fillRect(x, y, w, h);
 
       // Center Aim Reticle
@@ -216,20 +302,20 @@ export default function LiveCameraFeed() {
       ctx.stroke();
 
       // Cybernetic Telemetry Tag Header
-      const labelText = `HUMAN #${person.id} [${person.confidence}% CONF]`;
+      const labelText = `${person.label} [${person.confidence}% CONF]`;
       const distText = `EST. DISTANCE: ${person.distanceMeters}m`;
       ctx.font = 'bold 11px monospace';
       const textWidth = Math.max(ctx.measureText(labelText).width, ctx.measureText(distText).width);
       const tagHeight = 32;
       const tagY = Math.max(0, y - tagHeight - 4);
 
-      ctx.fillStyle = 'rgba(8, 13, 20, 0.92)';
-      ctx.strokeStyle = '#22C55E';
-      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(8, 13, 20, 0.94)';
+      ctx.strokeStyle = personColor;
+      ctx.lineWidth = 1.2;
       ctx.fillRect(x, tagY, textWidth + 14, tagHeight);
       ctx.strokeRect(x, tagY, textWidth + 14, tagHeight);
 
-      ctx.fillStyle = '#22C55E';
+      ctx.fillStyle = personColor;
       ctx.fillText(labelText, x + 6, tagY + 13);
       ctx.fillStyle = '#38BDF8';
       ctx.fillText(distText, x + 6, tagY + 26);
@@ -241,11 +327,114 @@ export default function LiveCameraFeed() {
     ctx.save();
     ctx.font = '10px monospace';
     ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
-    ctx.fillText('AI OPTICAL SCAN // REAL-TIME SURVIVOR DETECTION ACTIVE', 12, height - 12);
+    ctx.fillText(`AI MULTI-TARGET SURVIVOR DETECTION // TRACKING ${humans.length} ACTIVE TARGETS`, 12, height - 12);
     ctx.restore();
   }, [humanDetectionActive]);
 
-  // Zero-Lag Canvas Rendering Loop + Real-Time AI Human Detection
+  // Independent Decoupled AI Human Detection Worker Loop (Runs every 130ms on off-screen 320x240 canvas)
+  useEffect(() => {
+    if (!humanDetectionActive) {
+      trackedHumansRef.current = [];
+      setDetectedHumans([]);
+      setActiveAlert(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    // Initialize 320x240 off-screen canvas once for ultra-fast MobileNet SSD inference
+    if (!offscreenCanvasRef.current && typeof document !== 'undefined') {
+      const oc = document.createElement('canvas');
+      oc.width = 320;
+      oc.height = 240;
+      offscreenCanvasRef.current = oc;
+    }
+
+    const detectionInterval = setInterval(async () => {
+      if (!isMounted || isDetectingRef.current || !cocoModelRef.current || !canvasRef.current) {
+        return;
+      }
+
+      const displayCanvas = canvasRef.current;
+      const offCanvas = offscreenCanvasRef.current;
+      if (!offCanvas || displayCanvas.width === 0 || displayCanvas.height === 0) return;
+
+      const offCtx = offCanvas.getContext('2d');
+      if (!offCtx) return;
+
+      isDetectingRef.current = true;
+      const detectStart = performance.now();
+
+      try {
+        // Fast blit display canvas frame into 320x240 offscreen canvas
+        offCtx.drawImage(displayCanvas, 0, 0, 320, 240);
+
+        // Run MobileNet SSD inference on 320x240 (Takes ~20-30ms instead of 250ms!)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawPredictions = await cocoModelRef.current.detect(offCanvas, 6, 0.50);
+        const duration = Math.round(performance.now() - detectStart);
+        setInferenceLatency(duration);
+
+        if (!isMounted) return;
+
+        const scaleX = displayCanvas.width / 320;
+        const scaleY = displayCanvas.height / 240;
+
+        // Filter for persons with valid physical aspect ratio
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parsedHumans: DetectedHuman[] = rawPredictions
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .filter((p: any) => {
+            if (p.class !== 'person' || p.score < 0.50) return false;
+            const [, , w, h] = p.bbox;
+            if (w < 12 || h < 20) return false;
+            const aspect = h / w;
+            return aspect >= 0.75 && aspect <= 5.5; // Natural human silhouette ratio
+          })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((p: any, idx: number) => {
+            const sx = Math.round(p.bbox[0] * scaleX);
+            const sy = Math.round(p.bbox[1] * scaleY);
+            const sw = Math.round(p.bbox[2] * scaleX);
+            const sh = Math.round(p.bbox[3] * scaleY);
+            const relHeight = sh / displayCanvas.height;
+            const dist = Math.max(0.6, Math.min(8.0, Number((1.7 / Math.max(0.18, relHeight * 1.5)).toFixed(1))));
+
+            return {
+              bbox: [sx, sy, sw, sh] as [number, number, number, number],
+              confidence: Math.round(p.score * 100),
+              distanceMeters: dist,
+              id: idx + 1,
+              label: `HUMAN #${idx + 1}`,
+              color: HUMAN_COLORS[idx % HUMAN_COLORS.length],
+            };
+          });
+
+        if (parsedHumans.length > 0) {
+          lastSeenHumanTimeRef.current = Date.now();
+          trackedHumansRef.current = parsedHumans;
+          setDetectedHumans(parsedHumans);
+          handleAlertDispatch(parsedHumans);
+        } else if (Date.now() - lastSeenHumanTimeRef.current > 380) {
+          // Decay bounding box after 380ms of no detection to prevent flickering
+          trackedHumansRef.current = [];
+          setDetectedHumans([]);
+          handleAlertDispatch([]);
+        }
+      } catch {
+        // Ignored
+      } finally {
+        isDetectingRef.current = false;
+      }
+    }, 130);
+
+    return () => {
+      isMounted = false;
+      clearInterval(detectionInterval);
+    };
+  }, [humanDetectionActive, handleAlertDispatch]);
+
+  // Main Zero-Lag Video Rendering Loop (Decoupled: NEVER blocked on AI inference)
   useEffect(() => {
     if (renderMode !== 'canvas_fast') return;
     if (telemetry.camera.status === 'DISCONNECTED') return;
@@ -257,7 +446,6 @@ export default function LiveCameraFeed() {
 
     const base = getBaseHost();
     let consecutiveErrors = 0;
-    let detectionFrameCounter = 0;
 
     const renderLoop = async () => {
       while (isMounted && isLoopRunningRef.current) {
@@ -267,7 +455,6 @@ export default function LiveCameraFeed() {
         const proxyUrl = `/api/camera/snapshot?url=${encodeURIComponent(directUrl)}`;
 
         try {
-          // Try direct LAN first (0 hops, fastest)
           let res: Response;
           try {
             res = await fetch(directUrl, {
@@ -275,7 +462,6 @@ export default function LiveCameraFeed() {
               signal: controller.signal,
             });
           } catch {
-            // Fallback to local snapshot proxy if direct LAN fetch encounters CORS/PNA
             res = await fetch(proxyUrl, {
               cache: 'no-store',
               signal: controller.signal,
@@ -301,109 +487,8 @@ export default function LiveCameraFeed() {
                 }
                 ctx.drawImage(bitmap, 0, 0);
 
-                // Run AI Human Detection every 3 frames (~100-120ms) for high performance
-                detectionFrameCounter += 1;
-                if (humanDetectionActive && detectionFrameCounter % 3 === 0) {
-                  // 1. If Neural Network is loaded, run COCO-SSD detection
-                  if (cocoModelRef.current) {
-                    try {
-                      const predictions = await cocoModelRef.current.detect(canvas);
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const persons = predictions.filter((p: any) => p.class === 'person' && p.score >= 0.45);
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const mappedHumans: DetectedHuman[] = persons.map((p: any, idx: number) => {
-                        const relHeight = p.bbox[3] / canvas.height;
-                        const dist = Math.max(0.6, Math.min(8.0, Number((1.7 / Math.max(0.18, relHeight * 1.5)).toFixed(1))));
-                        return {
-                          bbox: p.bbox,
-                          confidence: Math.round(p.score * 100),
-                          distanceMeters: dist,
-                          id: idx + 1,
-                          label: 'HUMAN',
-                        };
-                      });
-
-                      setDetectedHumans(mappedHumans);
-                      setHumanDetection({
-                        detected: mappedHumans.length > 0,
-                        count: mappedHumans.length,
-                        confidence: mappedHumans[0]?.confidence || 0,
-                        distanceEst: mappedHumans[0]?.distanceMeters || 0,
-                      });
-
-                      if (mappedHumans.length > 0 && Date.now() - lastSoundAlertTimeRef.current > 6000) {
-                        lastSoundAlertTimeRef.current = Date.now();
-                        soundManager.playWarningAlert();
-                      }
-                    } catch {
-                      // Fallback
-                    }
-                  } else {
-                    // 2. High-speed Adaptive CV human/skin-contrast silhouette detector
-                    try {
-                      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                      const data = imgData.data;
-                      let skinPixels = 0;
-                      let minX = canvas.width;
-                      let maxX = 0;
-                      let minY = canvas.height;
-                      let maxY = 0;
-
-                      // Sample step 8 for speed
-                      for (let y = 0; y < canvas.height; y += 8) {
-                        for (let x = 0; x < canvas.width; x += 8) {
-                          const idx = (y * canvas.width + x) * 4;
-                          const r = data[idx];
-                          const g = data[idx + 1];
-                          const b = data[idx + 2];
-
-                          // Normalized human chromatic profile: R > G > B, (R-G) > 15
-                          if (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) > 12 && (r - b) > 15) {
-                            skinPixels += 1;
-                            if (x < minX) minX = x;
-                            if (x > maxX) maxX = x;
-                            if (y < minY) minY = y;
-                            if (y > maxY) maxY = y;
-                          }
-                        }
-                      }
-
-                      // If significant connected human signature cluster found
-                      if (skinPixels > 45 && maxX > minX + 50 && maxY > minY + 70) {
-                        const boxW = maxX - minX;
-                        const boxH = maxY - minY;
-                        const detected: DetectedHuman[] = [{
-                          bbox: [minX, minY, boxW, boxH],
-                          confidence: Math.min(96, Math.max(72, Math.round((skinPixels / 120) * 85))),
-                          distanceMeters: Number((1.7 / Math.max(0.2, (boxH / canvas.height) * 1.5)).toFixed(1)),
-                          id: 1,
-                          label: 'HUMAN / SURVIVOR',
-                        }];
-                        setDetectedHumans(detected);
-                        setHumanDetection({
-                          detected: true,
-                          count: 1,
-                          confidence: detected[0].confidence,
-                          distanceEst: detected[0].distanceMeters,
-                        });
-                      } else {
-                        setDetectedHumans([]);
-                        setHumanDetection({
-                          detected: false,
-                          count: 0,
-                          confidence: 0,
-                          distanceEst: 0,
-                        });
-                      }
-                    } catch {
-                      // Fallback
-                    }
-                  }
-                }
-
-                // Render Detection Overlays directly on frame
-                renderDetectionOverlays(ctx, detectedHumans, canvas.width, canvas.height);
-
+                // Render current tracked humans immediately with zero frame stall
+                drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
                 bitmap.close();
               } else {
                 const objUrl = URL.createObjectURL(blob);
@@ -415,7 +500,7 @@ export default function LiveCameraFeed() {
                       canvas.height = img.height;
                     }
                     ctx.drawImage(img, 0, 0);
-                    renderDetectionOverlays(ctx, detectedHumans, canvas.width, canvas.height);
+                    drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
                     URL.revokeObjectURL(objUrl);
                     resolve(null);
                   };
@@ -456,7 +541,7 @@ export default function LiveCameraFeed() {
       isMounted = false;
       controller.abort();
     };
-  }, [renderMode, getBaseHost, telemetry.camera.status, setCameraStatus, humanDetectionActive, renderDetectionOverlays, setHumanDetection, detectedHumans]);
+  }, [renderMode, getBaseHost, telemetry.camera.status, setCameraStatus, drawOverlaysOnCanvas]);
 
   // FPS calculation ticker
   useEffect(() => {
@@ -495,6 +580,7 @@ export default function LiveCameraFeed() {
     setConnectionError(null);
     setFps(0);
     setDetectedHumans([]);
+    setActiveAlert(null);
   };
 
   // Auto-connect on mount
@@ -511,6 +597,13 @@ export default function LiveCameraFeed() {
     } else {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
+  };
+
+  // Operator Acknowledge Alert Handler (Silences repeat alerts for current event)
+  const acknowledgeCurrentAlert = () => {
+    soundManager.playClickTone();
+    isAcknowledgedRef.current = true;
+    setIsAlertAcknowledged(true);
   };
 
   const isFeedActive = telemetry.camera.status === 'CONNECTED' || telemetry.camera.status === 'CONNECTING';
@@ -555,7 +648,11 @@ export default function LiveCameraFeed() {
               const next = !humanDetectionActive;
               setHumanDetectionActive(next);
               toggleHumanDetection(next);
-              if (!next) setDetectedHumans([]);
+              if (!next) {
+                trackedHumansRef.current = [];
+                setDetectedHumans([]);
+                setActiveAlert(null);
+              }
             }}
             className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-bold transition-all ${
               humanDetectionActive
@@ -665,16 +762,42 @@ export default function LiveCameraFeed() {
               </div>
             )}
 
-            {/* Top HUD Banner: Human Detected Alert */}
-            {humanDetectionActive && detectedHumans.length > 0 && (
-              <div className="absolute top-2 inset-x-4 mx-auto max-w-md bg-brand-bg/95 border-2 border-brand-success text-brand-success px-3 py-1.5 rounded-lg flex items-center justify-between shadow-2xl backdrop-blur-md z-20 animate-pulse pointer-events-none">
-                <div className="flex items-center gap-2 font-mono text-xs font-bold">
-                  <UserCheck className="w-4 h-4 text-brand-success" />
-                  <span>HUMAN LIFE DETECTED (COUNT: {detectedHumans.length}) // RESCUE ACTIVE</span>
+            {/* Top Tactical Alert Banner (Multi-Human Support + Anti-Spam Acknowledge) */}
+            {humanDetectionActive && activeAlert && (
+              <div className={`absolute top-2 inset-x-3 mx-auto max-w-lg rounded-lg border-2 px-3 py-2 flex items-center justify-between shadow-2xl backdrop-blur-md z-30 transition-all ${
+                activeAlert.type === 'MULTIPLE'
+                  ? 'bg-brand-bg/95 border-brand-accent text-brand-accent shadow-[0_0_20px_rgba(56,189,248,0.35)]'
+                  : 'bg-brand-bg/95 border-brand-success text-brand-success shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+              }`}>
+                <div className="flex items-center gap-2 font-mono text-xs font-bold truncate pr-2">
+                  {activeAlert.type === 'MULTIPLE' ? (
+                    <Users className="w-4 h-4 text-brand-accent shrink-0 animate-bounce" />
+                  ) : (
+                    <UserCheck className="w-4 h-4 text-brand-success shrink-0 animate-pulse" />
+                  )}
+                  <span className="truncate">{activeAlert.message}</span>
                 </div>
-                <span className="font-mono text-[10px] bg-brand-success text-brand-bg px-1.5 py-0.5 rounded font-extrabold">
-                  {detectedHumans[0]?.confidence}% CONF
-                </span>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono text-[10px] bg-brand-secondary text-brand-primaryText px-2 py-0.5 rounded border border-brand-border">
+                    {activeAlert.confidence}% CONF • {activeAlert.nearestDistance}m
+                  </span>
+                  
+                  {!isAlertAcknowledged ? (
+                    <button
+                      onClick={acknowledgeCurrentAlert}
+                      className="px-2 py-0.5 rounded bg-brand-card hover:bg-brand-secondary border border-brand-border text-brand-primaryText text-[10px] font-mono font-semibold transition-colors flex items-center gap-1"
+                      title="Silence repeat alerts for this event"
+                    >
+                      <BellOff className="w-3 h-3 text-brand-warning" />
+                      <span>Mute Alert</span>
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-mono text-brand-success px-1.5 py-0.5 rounded bg-brand-success/15 border border-brand-success/30 font-semibold">
+                      ACKNOWLEDGED
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -683,17 +806,17 @@ export default function LiveCameraFeed() {
               <span className="w-2 h-2 rounded-full bg-brand-danger animate-ping"></span>
               <span className="font-bold text-brand-danger">LIVE</span>
               <span className="text-white/40">|</span>
-              <span className="text-brand-success font-semibold">{frameLatency}ms LATENCY</span>
+              <span className="text-brand-success font-semibold">{frameLatency}ms LAG</span>
               <span className="text-white/40">|</span>
               <span className="text-brand-accent font-semibold">{fps > 0 ? `${fps} FPS` : 'CONNECTING'}</span>
               {humanDetectionActive && (
                 <>
                   <span className="text-white/40">|</span>
                   <span className={`font-bold flex items-center gap-1 ${
-                    detectedHumans.length > 0 ? 'text-brand-success' : 'text-brand-secondaryText'
+                    detectedHumans.length > 0 ? (detectedHumans.length > 1 ? 'text-brand-accent' : 'text-brand-success') : 'text-brand-secondaryText'
                   }`}>
                     <Scan className="w-3 h-3" />
-                    <span>{detectedHumans.length > 0 ? `${detectedHumans.length} HUMAN` : 'AI SCANNING'}</span>
+                    <span>{detectedHumans.length > 0 ? `${detectedHumans.length} ${detectedHumans.length === 1 ? 'HUMAN' : 'HUMANS'}` : 'AI SCANNING'}</span>
                   </span>
                 </>
               )}
@@ -702,7 +825,7 @@ export default function LiveCameraFeed() {
             {/* Direct Connection Badge (Right) */}
             <div className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-mono text-brand-success border border-brand-success/30 pointer-events-none z-10 flex items-center gap-1 shadow-md">
               <Zap className="w-3 h-3 text-brand-success" />
-              <span>DIRECT LAN ACTIVE</span>
+              <span>DIRECT LAN (0 HOPS)</span>
             </div>
           </div>
         ) : (
@@ -800,21 +923,25 @@ export default function LiveCameraFeed() {
             {/* AI Human Detection Status Drawer Section */}
             <div className="space-y-1 pt-1.5 border-t border-brand-border text-[9px]">
               <div className="flex justify-between">
-                <span>AI Human Model:</span>
+                <span>AI Neural Network:</span>
                 <span className="text-brand-accent font-bold">
-                  {modelStatus === 'READY' ? 'MobileNet v2 COCO-SSD' : modelStatus === 'LOADING' ? 'Loading Neural Net...' : 'Adaptive Vision CV'}
+                  {modelStatus === 'READY' ? 'MobileNet v2 COCO-SSD' : modelStatus === 'LOADING' ? 'Initializing weights...' : 'Standby'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>Detection Status:</span>
+                <span>AI Inference Time:</span>
+                <span className="text-brand-success font-bold">{inferenceLatency} ms (Async Worker)</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Human Targets Acquired:</span>
                 <span className={detectedHumans.length > 0 ? 'text-brand-success font-bold' : 'text-brand-secondaryText'}>
-                  {detectedHumans.length > 0 ? `ACQUIRED (${detectedHumans.length} TARGET)` : 'SCANNING TUNNEL'}
+                  {detectedHumans.length > 0 ? `${detectedHumans.length} INDIVIDUAL(S)` : '0 (SECTOR CLEAR)'}
                 </span>
               </div>
               {detectedHumans.length > 0 && (
                 <div className="flex justify-between">
-                  <span>Target Distance:</span>
-                  <span className="text-brand-success font-bold">{detectedHumans[0].distanceMeters} m</span>
+                  <span>Nearest Distance:</span>
+                  <span className="text-brand-success font-bold">{Math.min(...detectedHumans.map(d => d.distanceMeters))} m</span>
                 </div>
               )}
             </div>
@@ -871,7 +998,7 @@ export default function LiveCameraFeed() {
               onClick={handleConnect}
               className="px-3.5 py-1.5 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded text-xs font-semibold font-mono whitespace-nowrap shadow-sm flex items-center gap-1"
             >
-              <Play className="w-3 h-3 fill-current" />
+              <Play className="w-3.5 h-3.5 fill-current" />
               <span>Connect Live Feed</span>
             </button>
           )}
