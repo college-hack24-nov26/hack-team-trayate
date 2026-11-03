@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // Server-side ESP32 Communication Gateway
 // Relays commands and telemetry between browser and physical ESP32 boards on the local hotspot
 // Solves browser Private Network Access (PNA), mixed-content, and CORS constraints
-
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const targetBase = searchParams.get('base') || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71';
   const endpoint = searchParams.get('endpoint') || '/api/status';
-  const angle = searchParams.get('angle');
 
-  // Build target URL
-  let targetUrl = `${targetBase.replace(/\/+$/, '')}${endpoint}`;
-  if (angle !== null && angle !== undefined) {
-    targetUrl += `${targetUrl.includes('?') ? '&' : '?'}angle=${encodeURIComponent(angle)}`;
-  }
+  // Build target URL preserving all query parameters (e.g., angle, direction)
+  const cleanBase = targetBase.replace(/\/+$/, '');
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const targetUrlObj = new URL(`${cleanBase}${cleanEndpoint}`);
+
+  searchParams.forEach((val, key) => {
+    if (key !== 'base' && key !== 'endpoint') {
+      targetUrlObj.searchParams.set(key, val);
+    }
+  });
+
+  const targetUrl = targetUrlObj.toString();
 
   try {
     const controller = new AbortController();
@@ -66,4 +73,3 @@ export async function GET(req: NextRequest) {
     }, { status: 504 });
   }
 }
-

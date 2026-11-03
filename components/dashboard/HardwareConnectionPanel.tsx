@@ -122,35 +122,55 @@ export default function HardwareConnectionPanel() {
               <span className="font-mono text-[10px] text-brand-warning font-bold">ESP32-02</span>
               <h4 className="font-sans font-bold text-sm text-brand-primaryText">Motor Controller</h4>
             </div>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
-              config.motorUrl 
-                ? 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning' 
-                : 'bg-brand-secondary border-brand-border text-brand-secondaryText'
-            }`}>
-              {config.motorUrl ? 'AWAITING IP' : 'UNCONFIGURED'}
-            </span>
+            {(() => {
+              const motorDev = devices.find((d) => d.id === 'ESP32-02');
+              const isOnline = motorDev?.status === 'ONLINE';
+              return (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                  isOnline
+                    ? 'bg-brand-success/15 border-brand-success/40 text-brand-success flex items-center gap-1'
+                    : config.motorUrl 
+                    ? 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning' 
+                    : 'bg-brand-secondary border-brand-border text-brand-secondaryText'
+                }`}>
+                  {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-brand-success animate-pulse"></span>}
+                  <span>{isOnline ? 'ONLINE' : (config.motorUrl ? 'AWAITING PING' : 'UNCONFIGURED')}</span>
+                </span>
+              );
+            })()}
           </div>
 
           <div className="space-y-1.5 font-mono text-xs text-brand-secondaryText">
             <div className="flex justify-between">
               <span>Target IP:</span>
               <strong className={config.motorUrl ? 'text-brand-primaryText' : 'text-brand-warning'}>
-                {config.motorUrl || 'Not configured'}
+                {config.motorUrl || 'http://192.168.137.221'}
               </strong>
             </div>
             <div className="flex justify-between">
-              <span>Subsystems:</span>
-              <span className="text-brand-primaryText">6-Wheel PWM, E-Stop Relay</span>
+              <span>Endpoints:</span>
+              <span className="text-brand-accent">/move?direction=...</span>
             </div>
             <div className="flex justify-between">
               <span>Safety Interlock:</span>
-              <span className="text-brand-warning font-semibold">MOTOR COMMANDS INHIBITED</span>
+              <span className={devices.find((d) => d.id === 'ESP32-02')?.status === 'ONLINE' ? 'text-brand-success font-semibold' : 'text-brand-warning font-semibold'}>
+                {devices.find((d) => d.id === 'ESP32-02')?.status === 'ONLINE' ? 'ENGAGED & READY' : (config.motorUrl ? 'CONNECTING...' : 'MOTOR COMMANDS INHIBITED')}
+              </span>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-brand-border text-[10px] font-mono text-brand-warning flex items-center gap-1">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>Awaiting firmware IP assignment</span>
+          <div className="pt-2 border-t border-brand-border text-[10px] font-mono flex items-center gap-1">
+            {devices.find((d) => d.id === 'ESP32-02')?.status === 'ONLINE' ? (
+              <span className="text-brand-success flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Operational on hotspot</span>
+              </span>
+            ) : (
+              <span className="text-brand-warning flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Configured on http://192.168.137.221</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -228,7 +248,7 @@ export default function HardwareConnectionPanel() {
               type="text"
               value={config.motorUrl}
               onChange={(e) => setConfig({ ...config, motorUrl: e.target.value })}
-              placeholder="http://192.168.137.72 (when ready)"
+              placeholder="http://192.168.137.221"
               className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-brand-primaryText focus:outline-none focus:border-brand-accent"
             />
           </div>

@@ -52,7 +52,7 @@ export function getHardwareConfig(): HardwareClusterConfig {
         const parsed = JSON.parse(saved);
         return {
           sensorUrl: parsed.sensorUrl || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71',
-          motorUrl: parsed.motorUrl || process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || '',
+          motorUrl: parsed.motorUrl || process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221',
           edgeUrl: parsed.edgeUrl || process.env.NEXT_PUBLIC_ROVER_EDGE_URL || '',
         };
       } catch {
@@ -63,7 +63,7 @@ export function getHardwareConfig(): HardwareClusterConfig {
 
   return {
     sensorUrl: process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71',
-    motorUrl: process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || '',
+    motorUrl: process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221',
     edgeUrl: process.env.NEXT_PUBLIC_ROVER_EDGE_URL || '',
   };
 }
@@ -77,6 +77,7 @@ export function saveHardwareConfig(config: HardwareClusterConfig) {
 /**
  * Fetch live sensor telemetry from ESP32-01 (Rover Sensor Module)
  * Direct fetch with seamless proxy fallback
+ * Endpoint: GET /api/status
  */
 export async function fetchLiveSensorData(sensorUrlOverride?: string): Promise<ESP32SensorResponse> {
   const config = getHardwareConfig();
@@ -141,7 +142,7 @@ export async function fetchLiveSensorData(sensorUrlOverride?: string): Promise<E
 
 /**
  * Move the physical scanner servo to a specific angle (0° to 180°)
- * Available endpoint: GET /api/servo?angle=<angle>
+ * Endpoint: GET /api/servo?angle=<angle>
  */
 export async function sendServoAngleCommand(angle: number, sensorUrlOverride?: string): Promise<ServoCommandResponse> {
   const clampedAngle = Math.max(0, Math.min(180, Math.round(angle)));
@@ -209,7 +210,7 @@ export async function sendServoAngleCommand(angle: number, sensorUrlOverride?: s
 
 /**
  * Send movement command to ESP32-02 (Rover Motor Controller)
- * Strictly enforces safety: If ESP32-02 is not configured, movement commands are inhibited!
+ * Endpoint: GET /move?direction=forward | backward | left | right | stop
  */
 export async function sendMotorMovement(
   direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP',
@@ -217,9 +218,8 @@ export async function sendMotorMovement(
   motorUrlOverride?: string
 ): Promise<{ success: boolean; message: string; direction: string }> {
   const config = getHardwareConfig();
-  const motorUrl = (motorUrlOverride || config.motorUrl).trim();
+  const motorUrl = (motorUrlOverride || config.motorUrl || 'http://192.168.137.221').trim();
 
-  // Safety Requirement: Never send motor commands to ESP32-01!
   if (!motorUrl) {
     return {
       success: false,
@@ -229,17 +229,14 @@ export async function sendMotorMovement(
   }
 
   const cleanUrl = motorUrl.replace(/\/+$/, '');
+  const dirParam = direction.toLowerCase(); // 'forward' | 'backward' | 'left' | 'right' | 'stop'
 
+  // Try direct fetch first
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1200);
 
-    // Standard REST movement command format for ESP32 motor firmware:
-    // GET /api/move?dir=forward&speed=150
-    const dirParam = direction.toLowerCase();
-    const pwmVal = Math.round((speedPercent / 100) * 255);
-
-    const res = await fetch(`${cleanUrl}/api/move?dir=${dirParam}&speed=${pwmVal}`, {
+    const res = await fetch(`${cleanUrl}/move?direction=${dirParam}`, {
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -247,10 +244,35 @@ export async function sendMotorMovement(
     clearTimeout(timeout);
 
     if (res.ok) {
-      const data = await res.json().catch(() => ({ success: true }));
+      const data = await res.json().catch(() => ({ success: true, direction: dirParam }));
       return {
         success: data.success ?? true,
         message: `Command ${direction} acknowledged by ESP32-02`,
+        direction,
+      };
+    }
+  } catch {
+    // Direct fetch failed, fallback to server proxy
+  }
+
+  // Fallback to Next.js server proxy
+  try {
+    const proxyUrl = `/api/esp32/proxy?base=${encodeURIComponent(cleanUrl)}&endpoint=/move&direction=${dirParam}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(proxyUrl, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data = await res.json().catch(() => ({ success: true, direction: dirParam }));
+      return {
+        success: data.success ?? true,
+        message: `Command ${direction} relayed to ESP32-02 via proxy`,
         direction,
       };
     } else {
@@ -272,24 +294,27 @@ export async function sendMotorMovement(
 
 /**
  * Emergency Stop Motor Shutdown
+ * Endpoint: GET /move?direction=stop
  */
 export async function triggerHardwareEmergencyStop(motorUrlOverride?: string): Promise<{ success: boolean; message: string }> {
   const config = getHardwareConfig();
-  const motorUrl = (motorUrlOverride || config.motorUrl).trim();
+  const motorUrl = (motorUrlOverride || config.motorUrl || 'http://192.168.137.221').trim();
 
   if (!motorUrl) {
     return {
       success: true,
-      message: 'Emergency Stop active: Local safety latch engaged (No motor controller connected).',
+      message: 'Emergency Stop active: Local safety latch engaged.',
     };
   }
 
   const cleanUrl = motorUrl.replace(/\/+$/, '');
+
+  // Try direct fetch
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 800);
 
-    await fetch(`${cleanUrl}/api/estop`, {
+    await fetch(`${cleanUrl}/move?direction=stop`, {
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -299,9 +324,27 @@ export async function triggerHardwareEmergencyStop(motorUrlOverride?: string): P
       message: 'HARDWARE EMERGENCY STOP BROADCAST TO ESP32-02 (MOTORS CUT).',
     };
   } catch {
+    // Try proxy fallback for E-stop
+  }
+
+  try {
+    const proxyUrl = `/api/esp32/proxy?base=${encodeURIComponent(cleanUrl)}&endpoint=/move&direction=stop`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1200);
+
+    await fetch(proxyUrl, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(timeout);
+    return {
+      success: true,
+      message: 'HARDWARE EMERGENCY STOP RELAYED TO ESP32-02 (MOTORS CUT).',
+    };
+  } catch {
     return {
       success: false,
-      message: 'Emergency stop sent but ESP32-02 did not acknowledge.',
+      message: 'Emergency stop dispatched but ESP32-02 did not acknowledge.',
     };
   }
 }
@@ -341,13 +384,30 @@ export async function checkHardwareClusterHealth(): Promise<DeviceHealth[]> {
     id: 'ESP32-02',
     name: 'Rover Motor Controller',
     role: '6-Wheel Locomotion, PWM Speed Governor, Hardware E-Stop Interlock',
-    url: config.motorUrl || 'Awaiting IP configuration',
+    url: config.motorUrl || 'http://192.168.137.221',
     isConfigured: Boolean(config.motorUrl),
-    status: config.motorUrl ? 'OFFLINE' : 'UNCONFIGURED',
+    status: 'OFFLINE',
     lastPing: null,
     latencyMs: null,
-    errorDetails: config.motorUrl ? undefined : 'Firmware IP and endpoints awaiting deployment',
   };
+
+  if (config.motorUrl) {
+    const startTime = Date.now();
+    try {
+      const res = await sendMotorMovement('STOP', 0, config.motorUrl);
+      if (res.success) {
+        motorHealth.status = 'ONLINE';
+        motorHealth.lastPing = new Date().toLocaleTimeString();
+        motorHealth.latencyMs = Date.now() - startTime;
+      } else {
+        motorHealth.status = 'OFFLINE';
+        motorHealth.errorDetails = res.message;
+      }
+    } catch (err: unknown) {
+      motorHealth.status = 'OFFLINE';
+      motorHealth.errorDetails = err instanceof Error ? err.message : 'Connection failed';
+    }
+  }
 
   // 3. ESP32-03 Edge AI Module
   const edgeHealth: DeviceHealth = {
@@ -364,4 +424,3 @@ export async function checkHardwareClusterHealth(): Promise<DeviceHealth[]> {
 
   return [sensorHealth, motorHealth, edgeHealth];
 }
-
