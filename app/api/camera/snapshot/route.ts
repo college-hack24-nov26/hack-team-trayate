@@ -7,13 +7,18 @@ export async function GET(req: NextRequest) {
   const urlParam = req.nextUrl.searchParams.get('url') || 'http://192.168.4.57:8080/shot.jpg';
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const upstream = await fetch(urlParam, {
       cache: 'no-store',
+      signal: controller.signal,
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
       },
     });
+    clearTimeout(timeoutId);
 
     if (!upstream.ok) {
       return new Response('Failed to capture snapshot from camera', { status: upstream.status });

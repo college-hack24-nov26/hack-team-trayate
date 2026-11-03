@@ -18,7 +18,12 @@ import {
   UserX,
   Scan,
   Users,
-  BellOff
+  BellOff,
+  Smartphone,
+  Laptop,
+  CheckCircle2,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { soundManager } from '@/lib/soundAlerts';
@@ -40,6 +45,12 @@ interface ActiveHumanAlert {
   confidence: number;
   nearestDistance: number;
   timestamp: string;
+}
+
+interface HostIpInfo {
+  name: string;
+  ip: string;
+  type: string;
 }
 
 const HUMAN_COLORS = [
@@ -67,6 +78,14 @@ export default function LiveCameraFeed({
 }: LiveCameraFeedProps = {}) {
   const { telemetry, setCameraUrl, setCameraStatus, setHumanDetection, toggleHumanDetection } = useTelemetry();
 
+  // Camera Source: 'phone_ip' (Rover Android Phone) or 'device_cam' (Laptop/USB Webcam)
+  const [sourceType, setSourceType] = useState<'phone_ip' | 'device_cam'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('trayate_cam_source') as 'phone_ip' | 'device_cam') || 'phone_ip';
+    }
+    return 'phone_ip';
+  });
+
   const [streamUrl, setStreamUrl] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('trayate_cam_url') || telemetry.camera.url || 'http://192.168.4.57:8080';
@@ -83,17 +102,24 @@ export default function LiveCameraFeed({
     onFilterChange?.(mode);
   };
 
-  // Renderer mode: 'canvas_fast' (zero-lag canvas loop) vs 'native_mjpeg' (/video)
+  // Renderer mode for IP cam: 'canvas_fast' (zero-lag canvas loop) vs 'native_mjpeg' (/video)
   const [renderMode, setRenderMode] = useState<'canvas_fast' | 'native_mjpeg'>('canvas_fast');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  // Diagnostic ping state
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+    hostIps?: HostIpInfo[];
+  } | null>(null);
+
   // Live Performance Metrics
   const [fps, setFps] = useState<number>(0);
-  const [frameLatency, setFrameLatency] = useState<number>(45);
+  const [frameLatency, setFrameLatency] = useState<number>(35);
   const [inferenceLatency, setInferenceLatency] = useState<number>(24);
-  const [lastFrameTime, setLastFrameTime] = useState<string>('Ready');
   const [resPreset, setResPreset] = useState<'640x480' | '800x480' | '1280x720'>('640x480');
 
   // AI Human Detection State
@@ -118,6 +144,8 @@ export default function LiveCameraFeed({
   const lastFpsTimeRef = useRef<number>(Date.now());
   const isLoopRunningRef = useRef<boolean>(true);
   const activeControllerRef = useRef<AbortController | null>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -135,7 +163,7 @@ export default function LiveCameraFeed({
     }
   }, [streamUrl]);
 
-  // Adjust camera resolution remotely via IP Webcam API for instant lag elimination
+  // Adjust camera resolution remotely via IP Webcam API
   const setRemoteOptimization = useCallback(async (res: '640x480' | '800x480' | '1280x720' = '640x480', quality: number = 25) => {
     const base = getBaseHost();
     setResPreset(res);
@@ -147,6 +175,53 @@ export default function LiveCameraFeed({
       // Ignored: Best effort optimization
     }
   }, [getBaseHost]);
+
+  // Switch between Phone IP and Local Device Camera
+  const switchSource = (newSource: 'phone_ip' | 'device_cam') => {
+    // Stop any existing webcam stream
+    if (webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach((track) => track.stop());
+      webcamStreamRef.current = null;
+    }
+    if (activeControllerRef.current) {
+      activeControllerRef.current.abort();
+    }
+    setSourceType(newSource);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('trayate_cam_source', newSource);
+    }
+    setConnectionError(null);
+    setCameraStatus('CONNECTING');
+    isLoopRunningRef.current = true;
+  };
+
+  // Run instant connection test to diagnose phone IP reachability
+  const runConnectionTest = async () => {
+    setIsTestingConnection(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/camera/ping?url=${encodeURIComponent(streamUrl)}`);
+      const data = await res.json();
+      setTestResult({
+        ok: data.ok,
+        message: data.message,
+        hostIps: data.hostIps,
+      });
+      if (data.ok) {
+        setConnectionError(null);
+        setCameraStatus('CONNECTING');
+        isLoopRunningRef.current = true;
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Connection test failed';
+      setTestResult({
+        ok: false,
+        message: `Network request failed: ${msg}`,
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   // Dynamic High-Accuracy Neural Network Loader (TensorFlow.js + MobileNet v2 COCO-SSD)
   useEffect(() => {
@@ -181,7 +256,6 @@ export default function LiveCameraFeed({
         if (isCancelled) return;
 
         if (win.cocoSsd) {
-          // Load MobileNet v2 for maximum human detection accuracy
           const loadedModel = await win.cocoSsd.load({ base: 'mobilenet_v2' });
           if (!isCancelled) {
             cocoModelRef.current = loadedModel;
@@ -239,16 +313,15 @@ export default function LiveCameraFeed({
       type: count > 1 ? 'MULTIPLE' : 'SINGLE',
       count,
       message: count > 1 
-        ? `MULTIPLE HUMANS DETECTED [${count} PERSONS] // ACTIVE RESCUE ZONE` 
-        : `HUMAN LIFE DETECTED [1 PERSON] // SECTOR 4 VISUAL TARGET`,
+        ? `MULTIPLE SURVIVORS DETECTED [${count} PERSONS] // ACTIVE MISSION SECTOR` 
+        : `HUMAN DETECTED [1 PERSON] // SECTOR 4 VISUAL TARGET`,
       confidence: highestConfidence,
       nearestDistance: nearestDist,
       timestamp: new Date().toLocaleTimeString(),
     });
 
     // Anti-Spam Sound Alert Logic:
-    // 1. If human count changes (e.g. 0 -> 1, or 1 -> 2, or 2 -> 3), play alert immediately!
-    // 2. If same count remains, DO NOT SPAM! Silent while operator observes, with 30s gentle reminder.
+    // Play alert immediately when person count changes or after 30s reminder
     if (countChanged || (!isAcknowledgedRef.current && timeSinceLastAlert > 30000)) {
       lastAlertedCountRef.current = count;
       lastAlertTimestampRef.current = now;
@@ -256,7 +329,7 @@ export default function LiveCameraFeed({
       setIsAlertAcknowledged(false);
       soundManager.playWarningAlert();
 
-      // Automatically store human detection event in Supabase cloud backend
+      // Store human detection event in Supabase backend
       logHumanDetectionToSupabase({
         count,
         confidence: highestConfidence,
@@ -268,7 +341,7 @@ export default function LiveCameraFeed({
     }
   }, [setHumanDetection]);
 
-  // Fast Bounding Box Overlay Renderer (Runs synchronously with zero lag on frame draw)
+  // Fast Bounding Box Overlay Renderer
   const drawOverlaysOnCanvas = useCallback((
     ctx: CanvasRenderingContext2D, 
     humans: DetectedHuman[], 
@@ -284,101 +357,84 @@ export default function LiveCameraFeed({
 
       ctx.save();
 
-      // Cybernetic High-Visibility Targeting Box
+      // Tactical Targeting Box
       ctx.strokeStyle = personColor;
       ctx.lineWidth = 2.5;
       ctx.shadowColor = personColor;
-      ctx.shadowBlur = 9;
+      ctx.shadowBlur = 8;
 
       // 4 Corner Targeting Brackets
-      // Top-Left
       ctx.beginPath();
       ctx.moveTo(x, y + cornerLen);
       ctx.lineTo(x, y);
       ctx.lineTo(x + cornerLen, y);
       ctx.stroke();
 
-      // Top-Right
       ctx.beginPath();
       ctx.moveTo(x + w - cornerLen, y);
       ctx.lineTo(x + w, y);
       ctx.lineTo(x + w, y + cornerLen);
       ctx.stroke();
 
-      // Bottom-Left
       ctx.beginPath();
       ctx.moveTo(x, y + h - cornerLen);
       ctx.lineTo(x, y + h);
       ctx.lineTo(x + cornerLen, y + h);
       ctx.stroke();
 
-      // Bottom-Right
       ctx.beginPath();
       ctx.moveTo(x + w - cornerLen, y + h);
       ctx.lineTo(x + w, y + h);
       ctx.lineTo(x + w, y + h - cornerLen);
       ctx.stroke();
 
-      // Translucent target highlight
-      ctx.fillStyle = personColor === '#22C55E' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(56, 189, 248, 0.08)';
+      // Subtle fill tint
+      ctx.fillStyle = `${personColor}18`;
       ctx.fillRect(x, y, w, h);
 
-      // Center Aim Reticle
+      // Center crosshair
       const cx = x + w / 2;
-      const cy = y + h * 0.35; // Head / torso center
-      ctx.strokeStyle = '#38BDF8';
-      ctx.lineWidth = 1.5;
+      const cy = y + h / 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-      ctx.moveTo(cx - 10, cy);
-      ctx.lineTo(cx + 10, cy);
-      ctx.moveTo(cx, cy - 10);
-      ctx.lineTo(cx, cy + 10);
+      ctx.moveTo(cx - 5, cy);
+      ctx.lineTo(cx + 5, cy);
+      ctx.moveTo(cx, cy - 5);
+      ctx.lineTo(cx, cy + 5);
       ctx.stroke();
 
-      // Target Telemetry Tag Header
-      const labelText = `${person.label} • ${person.confidence}%`;
-      const distText = `Distance: ${person.distanceMeters}m`;
-      ctx.font = '600 11px "Plus Jakarta Sans", "Inter", sans-serif';
-      const textWidth = Math.max(ctx.measureText(labelText).width, ctx.measureText(distText).width);
-      const tagHeight = 32;
-      const tagY = Math.max(0, y - tagHeight - 4);
+      // HUD Label Tag
+      const labelText = `${person.label} • ${person.confidence}% • ~${person.distanceMeters}m`;
+      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+      const textWidth = ctx.measureText(labelText).width;
+      const tagHeight = 20;
+      const tagY = y > tagHeight + 4 ? y - tagHeight - 2 : y + h + 4;
 
-      ctx.fillStyle = 'rgba(8, 13, 20, 0.94)';
-      ctx.strokeStyle = personColor;
-      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(10, 15, 29, 0.92)';
       ctx.fillRect(x, tagY, textWidth + 14, tagHeight);
+
+      ctx.strokeStyle = personColor;
+      ctx.lineWidth = 1;
       ctx.strokeRect(x, tagY, textWidth + 14, tagHeight);
 
       ctx.fillStyle = personColor;
-      ctx.fillText(labelText, x + 6, tagY + 13);
-      ctx.fillStyle = '#38BDF8';
-      ctx.fillText(distText, x + 6, tagY + 26);
+      ctx.beginPath();
+      ctx.arc(x + 7, tagY + tagHeight / 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(labelText, x + 14, tagY + 14);
 
       ctx.restore();
     });
-
-    // Scanner Status overlay
-    ctx.save();
-    ctx.font = '500 11px "Plus Jakarta Sans", "Inter", sans-serif';
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
-    ctx.fillText(`AI Vision • Tracking ${humans.length} active target${humans.length === 1 ? '' : 's'}`, 12, height - 12);
-    ctx.restore();
   }, [humanDetectionActive]);
 
-  // Independent Decoupled AI Human Detection Worker Loop (Runs every 130ms on off-screen 320x240 canvas)
+  // AI Inference Loop (Runs asynchronously every 130ms on 320x240 offscreen canvas)
   useEffect(() => {
-    if (!humanDetectionActive) {
-      trackedHumansRef.current = [];
-      setDetectedHumans([]);
-      setActiveAlert(null);
-      return;
-    }
+    if (!humanDetectionActive) return;
 
     let isMounted = true;
-
-    // Initialize 320x240 off-screen canvas once for ultra-fast MobileNet SSD inference
-    if (!offscreenCanvasRef.current && typeof document !== 'undefined') {
+    if (!offscreenCanvasRef.current) {
       const oc = document.createElement('canvas');
       oc.width = 320;
       oc.height = 240;
@@ -386,13 +442,11 @@ export default function LiveCameraFeed({
     }
 
     const detectionInterval = setInterval(async () => {
-      if (!isMounted || isDetectingRef.current || !cocoModelRef.current || !canvasRef.current) {
-        return;
-      }
-
+      if (!isMounted || isDetectingRef.current || !cocoModelRef.current) return;
+      
       const displayCanvas = canvasRef.current;
       const offCanvas = offscreenCanvasRef.current;
-      if (!offCanvas || displayCanvas.width === 0 || displayCanvas.height === 0) return;
+      if (!displayCanvas || !offCanvas || displayCanvas.width === 0 || displayCanvas.height === 0) return;
 
       const offCtx = offCanvas.getContext('2d');
       if (!offCtx) return;
@@ -401,10 +455,7 @@ export default function LiveCameraFeed({
       const detectStart = performance.now();
 
       try {
-        // Fast blit display canvas frame into 320x240 offscreen canvas
         offCtx.drawImage(displayCanvas, 0, 0, 320, 240);
-
-        // Run MobileNet SSD inference on 320x240 (Takes ~20-30ms instead of 250ms!)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rawPredictions = await cocoModelRef.current.detect(offCanvas, 6, 0.50);
         const duration = Math.round(performance.now() - detectStart);
@@ -415,7 +466,6 @@ export default function LiveCameraFeed({
         const scaleX = displayCanvas.width / 320;
         const scaleY = displayCanvas.height / 240;
 
-        // Filter for persons with valid physical aspect ratio
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const parsedHumans: DetectedHuman[] = rawPredictions
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -424,7 +474,7 @@ export default function LiveCameraFeed({
             const [, , w, h] = p.bbox;
             if (w < 12 || h < 20) return false;
             const aspect = h / w;
-            return aspect >= 0.75 && aspect <= 5.5; // Natural human silhouette ratio
+            return aspect >= 0.75 && aspect <= 5.5;
           })
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .map((p: any, idx: number) => {
@@ -440,7 +490,7 @@ export default function LiveCameraFeed({
               confidence: Math.round(p.score * 100),
               distanceMeters: dist,
               id: idx + 1,
-              label: `HUMAN #${idx + 1}`,
+              label: `PERSON #${idx + 1}`,
               color: HUMAN_COLORS[idx % HUMAN_COLORS.length],
             };
           });
@@ -451,7 +501,6 @@ export default function LiveCameraFeed({
           setDetectedHumans(parsedHumans);
           handleAlertDispatch(parsedHumans);
         } else if (Date.now() - lastSeenHumanTimeRef.current > 380) {
-          // Decay bounding box after 380ms of no detection to prevent flickering
           trackedHumansRef.current = [];
           setDetectedHumans([]);
           handleAlertDispatch([]);
@@ -469,8 +518,106 @@ export default function LiveCameraFeed({
     };
   }, [humanDetectionActive, handleAlertDispatch]);
 
-  // Main Zero-Lag Video Rendering Loop (Decoupled: NEVER blocked on AI inference)
+  // Video Renderer for LOCAL DEVICE WEBCAM
   useEffect(() => {
+    if (sourceType !== 'device_cam') return;
+
+    let isMounted = true;
+    let animId: number;
+
+    const startLocalCam = async () => {
+      try {
+        setCameraStatus('CONNECTING');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user',
+          },
+          audio: false,
+        });
+
+        if (!isMounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        webcamStreamRef.current = stream;
+
+        // Hidden video element to play webcam stream
+        let video = webcamVideoRef.current;
+        if (!video) {
+          video = document.createElement('video');
+          video.playsInline = true;
+          video.muted = true;
+          video.autoplay = true;
+          webcamVideoRef.current = video;
+        }
+
+        video.srcObject = stream;
+        await video.play();
+
+        setCameraStatus('CONNECTED');
+        setConnectionError(null);
+
+        const renderWebcamFrame = () => {
+          if (!isMounted || sourceType !== 'device_cam') return;
+
+          const canvas = canvasRef.current;
+          if (canvas && video && video.readyState >= 2) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+              }
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
+
+              if (thermalCanvasRef.current) {
+                const tCanvas = thermalCanvasRef.current;
+                if (tCanvas.width !== canvas.width || tCanvas.height !== canvas.height) {
+                  tCanvas.width = canvas.width;
+                  tCanvas.height = canvas.height;
+                }
+                const tCtx = tCanvas.getContext('2d');
+                if (tCtx) {
+                  tCtx.drawImage(canvas, 0, 0);
+                }
+              }
+
+              frameCountRef.current += 1;
+              setFrameLatency(8); // Hardware direct latency
+            }
+          }
+
+          animId = requestAnimationFrame(renderWebcamFrame);
+        };
+
+        animId = requestAnimationFrame(renderWebcamFrame);
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : 'Failed to access local camera';
+        setCameraStatus('ERROR');
+        setConnectionError(`Local camera permission denied or no device found: ${msg}`);
+      }
+    };
+
+    startLocalCam();
+
+    return () => {
+      isMounted = false;
+      cancelAnimationFrame(animId);
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+        webcamStreamRef.current = null;
+      }
+    };
+  }, [sourceType, setCameraStatus, drawOverlaysOnCanvas]);
+
+  // Video Renderer for ROVER PHONE IP WEBCAM
+  useEffect(() => {
+    if (sourceType !== 'phone_ip') return;
     if (renderMode !== 'canvas_fast') return;
     if (telemetry.camera.status === 'DISCONNECTED') return;
 
@@ -482,8 +629,24 @@ export default function LiveCameraFeed({
     const base = getBaseHost();
     let consecutiveErrors = 0;
 
+    const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+      const timeoutController = new AbortController();
+      const tid = setTimeout(() => timeoutController.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          cache: 'no-store',
+          signal: timeoutController.signal,
+        });
+        clearTimeout(tid);
+        return res;
+      } catch (e) {
+        clearTimeout(tid);
+        throw e;
+      }
+    };
+
     const renderLoop = async () => {
-      while (isMounted && isLoopRunningRef.current) {
+      while (isMounted && isLoopRunningRef.current && sourceType === 'phone_ip') {
         const frameStart = performance.now();
         const timestamp = Date.now();
         const directUrl = `${base}/shot.jpg?t=${timestamp}`;
@@ -492,15 +655,11 @@ export default function LiveCameraFeed({
         try {
           let res: Response;
           try {
-            res = await fetch(directUrl, {
-              cache: 'no-store',
-              signal: controller.signal,
-            });
+            // Direct LAN fetch with quick 1200ms timeout
+            res = await fetchWithTimeout(directUrl, 1200);
           } catch {
-            res = await fetch(proxyUrl, {
-              cache: 'no-store',
-              signal: controller.signal,
-            });
+            // Fallback to proxy route with 1500ms timeout
+            res = await fetchWithTimeout(proxyUrl, 1500);
           }
 
           if (!res.ok) {
@@ -521,11 +680,8 @@ export default function LiveCameraFeed({
                   canvas.height = bitmap.height;
                 }
                 ctx.drawImage(bitmap, 0, 0);
-
-                // Render current tracked humans immediately with zero frame stall
                 drawOverlaysOnCanvas(ctx, trackedHumansRef.current, canvas.width, canvas.height);
 
-                // In split mode, mirror frame into thermal canvas
                 if (thermalCanvasRef.current) {
                   const tCanvas = thermalCanvasRef.current;
                   if (tCanvas.width !== canvas.width || tCanvas.height !== canvas.height) {
@@ -573,11 +729,10 @@ export default function LiveCameraFeed({
             }
           }
 
-          // Latency & Metrics Update
           const latency = Math.round(performance.now() - frameStart);
           setFrameLatency(latency);
           frameCountRef.current += 1;
-          setLastFrameTime(new Date().toLocaleTimeString());
+
           setCameraStatus('CONNECTED');
           setConnectionError(null);
           consecutiveErrors = 0;
@@ -588,11 +743,13 @@ export default function LiveCameraFeed({
           if (isAborted) break;
 
           consecutiveErrors += 1;
-          if (consecutiveErrors > 5) {
+          if (consecutiveErrors >= 3) {
             setCameraStatus('ERROR');
-            setConnectionError('Camera feed connection lost. Checking connection...');
+            setConnectionError(
+              `Cannot reach IP Webcam at ${base}. Ensure the Android app has "Start server" turned on.`
+            );
           }
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, 400));
         }
       }
     };
@@ -603,9 +760,9 @@ export default function LiveCameraFeed({
       isMounted = false;
       controller.abort();
     };
-  }, [renderMode, getBaseHost, telemetry.camera.status, setCameraStatus, drawOverlaysOnCanvas]);
+  }, [sourceType, renderMode, getBaseHost, telemetry.camera.status, setCameraStatus, drawOverlaysOnCanvas]);
 
-  // FPS calculation ticker
+  // FPS ticker
   useEffect(() => {
     const fpsInterval = setInterval(() => {
       const now = Date.now();
@@ -621,6 +778,10 @@ export default function LiveCameraFeed({
 
   // Connect handler
   const handleConnect = () => {
+    if (sourceType === 'device_cam') {
+      switchSource('device_cam');
+      return;
+    }
     if (!streamUrl.trim()) return;
     setConnectionError(null);
     if (typeof window !== 'undefined') {
@@ -638,6 +799,10 @@ export default function LiveCameraFeed({
     if (activeControllerRef.current) {
       activeControllerRef.current.abort();
     }
+    if (webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+      webcamStreamRef.current = null;
+    }
     setCameraStatus('DISCONNECTED');
     setConnectionError(null);
     setFps(0);
@@ -649,8 +814,10 @@ export default function LiveCameraFeed({
   useEffect(() => {
     setCameraStatus('CONNECTING');
     isLoopRunningRef.current = true;
-    setRemoteOptimization('640x480', 25);
-  }, [setCameraStatus, setRemoteOptimization]);
+    if (sourceType === 'phone_ip') {
+      setRemoteOptimization('640x480', 25);
+    }
+  }, [sourceType, setCameraStatus, setRemoteOptimization]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -661,7 +828,6 @@ export default function LiveCameraFeed({
     }
   };
 
-  // Operator Acknowledge Alert Handler (Silences repeat alerts for current event)
   const acknowledgeCurrentAlert = () => {
     soundManager.playClickTone();
     isAcknowledgedRef.current = true;
@@ -679,15 +845,15 @@ export default function LiveCameraFeed({
       } ${className}`}
     >
       {/* Top Header */}
-      <div className="h-12 px-4 bg-brand-secondary border-b border-brand-border flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent">
+      <div className="h-12 px-3 sm:px-4 bg-brand-secondary border-b border-brand-border flex items-center justify-between shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-brand-accent shrink-0">
             <Camera className="w-4 h-4" />
           </div>
-          <span className="font-sans font-semibold text-brand-primaryText text-sm">
+          <span className="font-sans font-semibold text-brand-primaryText text-xs sm:text-sm truncate">
             {title}
           </span>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1.5 shrink-0 ${
             telemetry.camera.status === 'CONNECTED'
               ? 'bg-brand-success/15 border-brand-success/40 text-brand-success'
               : telemetry.camera.status === 'CONNECTING'
@@ -698,15 +864,43 @@ export default function LiveCameraFeed({
             <span>{telemetry.camera.status === 'CONNECTED' ? 'Live' : telemetry.camera.status === 'CONNECTING' ? 'Connecting...' : 'Offline'}</span>
           </span>
           {telemetry.camera.status === 'CONNECTED' && (
-            <span className="text-xs text-brand-secondaryText hidden sm:inline">
+            <span className="text-xs text-brand-secondaryText hidden md:inline truncate">
               {frameLatency}ms latency • {fps} FPS
             </span>
           )}
         </div>
 
-        {/* Engine Switcher, AI Human Detection Toggle & Controls */}
-        <div className="flex items-center gap-2">
+        {/* Source Toggle, AI Human Detection Toggle & Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           
+          {/* Source Selector: Rover IP Phone vs Device Cam */}
+          <div className="flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
+            <button
+              onClick={() => switchSource('phone_ip')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors ${
+                sourceType === 'phone_ip'
+                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                  : 'text-brand-secondaryText hover:text-brand-primaryText'
+              }`}
+              title="Rover Smartphone IP Webcam (Android)"
+            >
+              <Smartphone className="w-3 h-3" />
+              <span className="hidden sm:inline">Rover IP Cam</span>
+            </button>
+            <button
+              onClick={() => switchSource('device_cam')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors ${
+                sourceType === 'device_cam'
+                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                  : 'text-brand-secondaryText hover:text-brand-primaryText'
+              }`}
+              title="Local USB or Laptop Webcam (Testing)"
+            >
+              <Laptop className="w-3 h-3" />
+              <span className="hidden sm:inline">Device Cam</span>
+            </button>
+          </div>
+
           {/* AI Human Detection Toggle Button */}
           <button
             onClick={() => {
@@ -719,58 +913,60 @@ export default function LiveCameraFeed({
                 setActiveAlert(null);
               }
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
               humanDetectionActive
                 ? 'bg-brand-success/15 border-brand-success/40 text-brand-success shadow-xs'
                 : 'bg-brand-bg border-brand-border text-brand-secondaryText hover:text-brand-primaryText'
             }`}
-            title="Toggle Real-Time AI Human Detection on Camera Feed"
+            title="Toggle Real-Time AI Human Detection"
           >
             {humanDetectionActive ? (
               <UserCheck className="w-3.5 h-3.5 text-brand-success" />
             ) : (
               <UserX className="w-3.5 h-3.5 text-brand-secondaryText" />
             )}
-            <span className="hidden sm:inline">AI Human Detection:</span>
+            <span className="hidden lg:inline">AI Detection:</span>
             <span>{humanDetectionActive ? 'On' : 'Off'}</span>
           </button>
 
-          {/* Stream Engine Toggle */}
-          <div className="flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
-            <button
-              onClick={() => {
-                setRenderMode('canvas_fast');
-                isLoopRunningRef.current = true;
-                setCameraStatus('CONNECTING');
-              }}
-              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                renderMode === 'canvas_fast'
-                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
-                  : 'text-brand-secondaryText hover:text-brand-primaryText'
-              }`}
-              title="Direct canvas render (<70ms zero-lag pipeline)"
-            >
-              Zero-Lag
-            </button>
-            <button
-              onClick={() => {
-                setRenderMode('native_mjpeg');
-                isLoopRunningRef.current = false;
-              }}
-              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                renderMode === 'native_mjpeg'
-                  ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
-                  : 'text-brand-secondaryText hover:text-brand-primaryText'
-              }`}
-              title="Continuous MJPEG stream (/video)"
-            >
-              MJPEG
-            </button>
-          </div>
+          {/* Stream Engine Toggle (Only for IP Cam) */}
+          {sourceType === 'phone_ip' && (
+            <div className="hidden sm:flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
+              <button
+                onClick={() => {
+                  setRenderMode('canvas_fast');
+                  isLoopRunningRef.current = true;
+                  setCameraStatus('CONNECTING');
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  renderMode === 'canvas_fast'
+                    ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                    : 'text-brand-secondaryText hover:text-brand-primaryText'
+                }`}
+                title="Direct canvas render (<60ms zero-lag pipeline)"
+              >
+                Zero-Lag
+              </button>
+              <button
+                onClick={() => {
+                  setRenderMode('native_mjpeg');
+                  isLoopRunningRef.current = false;
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                  renderMode === 'native_mjpeg'
+                    ? 'bg-brand-accent text-brand-bg font-semibold shadow-xs'
+                    : 'text-brand-secondaryText hover:text-brand-primaryText'
+                }`}
+                title="Continuous MJPEG stream (/video)"
+              >
+                MJPEG
+              </button>
+            </div>
+          )}
 
           {/* Optional Filter Controls (Optical / Thermal / Split) */}
           {showFilterControls && (
-            <div className="hidden sm:flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
+            <div className="hidden md:flex items-center bg-brand-bg p-0.5 rounded-lg border border-brand-border text-xs">
               <button
                 onClick={() => handleFilterSelect('optical')}
                 className={`px-2 py-1 rounded-md font-medium transition-colors ${
@@ -806,7 +1002,7 @@ export default function LiveCameraFeed({
 
           <button
             onClick={() => setShowDiagnostics(!showDiagnostics)}
-            className={`p-2 rounded-lg hover:bg-brand-bg transition-colors ${
+            className={`p-1.5 rounded-lg hover:bg-brand-bg transition-colors ${
               showDiagnostics ? 'text-brand-accent' : 'text-brand-secondaryText'
             }`}
             title="Stream Diagnostics & Settings"
@@ -816,7 +1012,7 @@ export default function LiveCameraFeed({
 
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg text-brand-secondaryText hover:text-brand-primaryText hover:bg-brand-bg transition-colors"
+            className="p-1.5 rounded-lg text-brand-secondaryText hover:text-brand-primaryText hover:bg-brand-bg transition-colors"
             title="Toggle Fullscreen"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -829,36 +1025,36 @@ export default function LiveCameraFeed({
         {isFeedActive ? (
           <div className="relative w-full h-full flex items-center justify-center">
             {currentFilter === 'split' ? (
-              /* DUAL SPLIT VIEWPORT (OPTICAL + FLIR THERMAL) */
+              /* DUAL SPLIT VIEWPORT */
               <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-2 p-2">
                 <div className="relative rounded-lg overflow-hidden border border-brand-border bg-black flex items-center justify-center min-h-[200px]">
-                  {renderMode === 'canvas_fast' ? (
+                  {renderMode === 'canvas_fast' || sourceType === 'device_cam' ? (
                     <canvas ref={canvasRef} className="w-full h-full object-contain block" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={effectiveMjpegUrl} alt="HD Optical Feed" className="w-full h-full object-contain" />
                   )}
-                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono text-brand-accent border border-brand-accent/30 pointer-events-none z-10">
-                    HD OPTICAL (1080p RGB)
+                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-sans text-brand-accent border border-brand-accent/30 pointer-events-none z-10 font-semibold">
+                    HD OPTICAL RGB
                   </div>
                 </div>
 
                 <div className="relative rounded-lg overflow-hidden border border-brand-border bg-black flex items-center justify-center min-h-[200px]">
-                  {renderMode === 'canvas_fast' ? (
+                  {renderMode === 'canvas_fast' || sourceType === 'device_cam' ? (
                     <canvas ref={thermalCanvasRef} className="w-full h-full object-contain block filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={effectiveMjpegUrl} alt="Thermal Simulation Feed" className="w-full h-full object-contain filter contrast-125 brightness-110 hue-rotate-190 invert saturate-200" />
                   )}
-                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono text-brand-danger border border-brand-danger/30 pointer-events-none z-10">
+                  <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-sans text-brand-danger border border-brand-danger/30 pointer-events-none z-10 font-semibold">
                     FLIR THERMAL LWIR 32x24
                   </div>
                 </div>
               </div>
             ) : (
-              /* SINGLE VIEWPORT (OPTICAL OR THERMAL) */
+              /* SINGLE VIEWPORT */
               <div className="relative w-full h-full flex items-center justify-center">
-                {renderMode === 'canvas_fast' && (
+                {(renderMode === 'canvas_fast' || sourceType === 'device_cam') && (
                   <canvas
                     ref={canvasRef}
                     className={`w-full h-full object-contain block transition-all duration-300 ${
@@ -867,7 +1063,7 @@ export default function LiveCameraFeed({
                   />
                 )}
 
-                {renderMode === 'native_mjpeg' && (
+                {renderMode === 'native_mjpeg' && sourceType === 'phone_ip' && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     ref={mjpegImgRef}
@@ -882,13 +1078,13 @@ export default function LiveCameraFeed({
                     }}
                     onError={() => {
                       setCameraStatus('ERROR');
-                      setConnectionError('MJPEG stream stalled. Switching to ZERO-LAG PIPELINE recommended.');
+                      setConnectionError('MJPEG stream connection stalled. Switching to ZERO-LAG CANVAS recommended.');
                     }}
                   />
                 )}
 
                 {currentFilter === 'thermal' && (
-                  <div className="absolute top-3 left-3 bg-brand-danger/90 backdrop-blur-sm px-2.5 py-1 rounded text-xs font-mono text-white border border-brand-danger/40 pointer-events-none z-20">
+                  <div className="absolute top-3 left-3 bg-brand-danger/90 backdrop-blur-sm px-2.5 py-1 rounded text-xs font-sans text-white border border-brand-danger/40 pointer-events-none z-20 font-semibold">
                     FLIR THERMAL LWIR 32x24 HEATMAP
                   </div>
                 )}
@@ -897,9 +1093,11 @@ export default function LiveCameraFeed({
 
             {/* Connecting Spinner Overlay */}
             {telemetry.camera.status === 'CONNECTING' && fps === 0 && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-xs font-sans text-brand-accent">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-xs font-sans text-brand-accent z-20">
                 <RefreshCw className="w-6 h-6 animate-spin text-brand-accent" />
-                <span className="font-medium">Connecting camera stream...</span>
+                <span className="font-medium">
+                  {sourceType === 'device_cam' ? 'Accessing local webcam...' : 'Connecting to rover camera stream...'}
+                </span>
               </div>
             )}
 
@@ -910,7 +1108,7 @@ export default function LiveCameraFeed({
                   ? 'bg-brand-bg/95 border-brand-accent text-brand-accent shadow-brand-accent/20'
                   : 'bg-brand-bg/95 border-brand-success text-brand-success shadow-brand-success/20'
               }`}>
-                <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold truncate pr-2">
+                <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold truncate pr-2 font-sans">
                   {activeAlert.type === 'MULTIPLE' ? (
                     <Users className="w-4 h-4 text-brand-accent shrink-0" />
                   ) : (
@@ -920,21 +1118,21 @@ export default function LiveCameraFeed({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] font-mono bg-brand-secondary text-brand-primaryText px-2 py-0.5 rounded border border-brand-border">
+                  <span className="text-[11px] font-sans bg-brand-secondary text-brand-primaryText px-2 py-0.5 rounded border border-brand-border font-medium">
                     {activeAlert.confidence}% • {activeAlert.nearestDistance}m
                   </span>
                   
                   {!isAlertAcknowledged ? (
                     <button
                       onClick={acknowledgeCurrentAlert}
-                      className="px-2.5 py-1 rounded-md bg-brand-card hover:bg-brand-secondary border border-brand-border text-brand-primaryText text-xs font-medium transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1 rounded-md bg-brand-card hover:bg-brand-secondary border border-brand-border text-brand-primaryText text-xs font-medium transition-colors flex items-center gap-1 font-sans"
                       title="Silence sound alerts for this detection"
                     >
                       <BellOff className="w-3.5 h-3.5 text-brand-warning" />
                       <span>Mute</span>
                     </button>
                   ) : (
-                    <span className="text-xs text-brand-success px-2 py-0.5 rounded bg-brand-success/15 border border-brand-success/30 font-medium">
+                    <span className="text-xs text-brand-success px-2 py-0.5 rounded bg-brand-success/15 border border-brand-success/30 font-medium font-sans">
                       Muted
                     </span>
                   )}
@@ -966,54 +1164,148 @@ export default function LiveCameraFeed({
             {/* Direct Connection Badge (Right) */}
             <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs font-sans text-brand-success border border-brand-success/30 pointer-events-none z-10 flex items-center gap-1.5 shadow-md">
               <Zap className="w-3.5 h-3.5 text-brand-success" />
-              <span>Direct LAN</span>
+              <span>{sourceType === 'device_cam' ? 'Device Camera' : 'Direct LAN'}</span>
             </div>
           </div>
         ) : (
-          /* Disconnected State */
-          <div className="p-8 text-center max-w-md space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
-              <WifiOff className="w-7 h-7 text-brand-secondaryText" />
+          /* Disconnected State with Diagnostic Troubleshooter */
+          <div className="p-6 sm:p-8 text-center max-w-lg space-y-4 my-auto overflow-y-auto max-h-full">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
+              <WifiOff className="w-6 h-6 sm:w-7 sm:h-7 text-brand-secondaryText" />
             </div>
 
-            <div className="space-y-1.5">
-              <h4 className="text-base font-semibold text-brand-primaryText">
-                Camera Feed Disconnected
+            <div className="space-y-1">
+              <h4 className="text-base sm:text-lg font-bold text-brand-primaryText font-sans">
+                {sourceType === 'phone_ip' ? 'Rover Camera Disconnected' : 'Device Camera Offline'}
               </h4>
               <p className="text-xs text-brand-secondaryText leading-relaxed">
-                Connect to <strong className="text-brand-accent">IP Webcam</strong> on the rover smartphone at <code className="text-brand-primaryText font-mono">http://192.168.4.57:8080</code>.
+                {sourceType === 'phone_ip' ? (
+                  <>Connect to <strong className="text-brand-accent">IP Webcam</strong> app on the rover smartphone.</>
+                ) : (
+                  <>Local device webcam is currently offline. Allow camera permissions or switch to Rover IP Cam.</>
+                )}
               </p>
             </div>
 
-            {connectionError && (
-              <div className="p-2.5 rounded-lg bg-brand-danger/10 border border-brand-danger/30 text-brand-danger text-xs text-left">
-                {connectionError}
+            {/* Actionable Phone Setup Checklist */}
+            {sourceType === 'phone_ip' && (
+              <div className="p-3 sm:p-4 rounded-xl bg-brand-secondary/70 border border-brand-border text-left space-y-2.5 text-xs">
+                <div className="font-semibold text-brand-primaryText flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-brand-accent" />
+                  <span>How to connect your Android phone:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1.5 text-brand-secondaryText text-[11px] sm:text-xs">
+                  <li>Open the <strong className="text-brand-primaryText">IP Webcam</strong> app on your Android phone.</li>
+                  <li>Scroll all the way to the bottom and tap <strong className="text-brand-success">Start server</strong>.</li>
+                  <li>Check the URL shown on the phone screen (e.g. <code className="text-brand-accent bg-brand-bg px-1 rounded font-mono">http://192.168.4.57:8080</code>).</li>
+                  <li>Make sure phone is connected to the same Wi-Fi or your Laptop Hotspot.</li>
+                </ol>
               </div>
             )}
 
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
-              <button
-                onClick={handleConnect}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold shadow-sm transition-all"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                <span>Connect Live Feed</span>
-              </button>
+            {/* Error or Test Feedback */}
+            {connectionError && (
+              <div className="p-2.5 rounded-lg bg-brand-danger/10 border border-brand-danger/30 text-brand-danger text-xs text-left flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{connectionError}</span>
+              </div>
+            )}
 
-              <a
-                href={getBaseHost()}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-secondaryText hover:text-brand-primaryText text-xs font-medium border border-brand-border transition-colors"
-              >
-                <span>Camera Hub</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+            {/* Live Diagnostic Ping Test Result */}
+            {testResult && (
+              <div className={`p-3 rounded-lg border text-xs text-left space-y-1.5 ${
+                testResult.ok 
+                  ? 'bg-brand-success/10 border-brand-success/30 text-brand-success' 
+                  : 'bg-brand-warning/10 border-brand-warning/30 text-brand-warning'
+              }`}>
+                <div className="flex items-center gap-1.5 font-semibold">
+                  {testResult.ok ? (
+                    <CheckCircle2 className="w-4 h-4 text-brand-success" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-brand-warning" />
+                  )}
+                  <span>{testResult.ok ? 'Connection Verified!' : 'Phone Server Not Detected'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-brand-primaryText/90">{testResult.message}</p>
+                {testResult.hostIps && testResult.hostIps.length > 0 && (
+                  <div className="pt-1 border-t border-brand-border/40 text-[10px] text-brand-secondaryText">
+                    <span className="font-semibold text-brand-primaryText">Your Computer Networks:</span>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {testResult.hostIps.map((h, i) => (
+                        <li key={i} className="font-mono">
+                          • {h.type}: <span className="text-brand-accent">{h.ip}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Buttons: Connect, Test Connection, Switch to Device Webcam */}
+            <div className="pt-1 flex flex-wrap items-center justify-center gap-2">
+              {sourceType === 'phone_ip' ? (
+                <>
+                  <button
+                    onClick={handleConnect}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold shadow-sm transition-all"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Connect Feed</span>
+                  </button>
+
+                  <button
+                    onClick={runConnectionTest}
+                    disabled={isTestingConnection}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-primaryText text-xs font-medium border border-brand-border transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingConnection ? 'animate-spin text-brand-accent' : ''}`} />
+                    <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => switchSource('device_cam')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-success/15 hover:bg-brand-success/25 text-brand-success text-xs font-medium border border-brand-success/30 transition-colors"
+                    title="Test with your laptop or USB webcam right now"
+                  >
+                    <Laptop className="w-3.5 h-3.5" />
+                    <span>Use Device / USB Webcam</span>
+                  </button>
+
+                  <a
+                    href={getBaseHost()}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-brand-bg hover:bg-brand-card text-brand-secondaryText hover:text-brand-primaryText text-xs font-medium border border-brand-border transition-colors"
+                  >
+                    <span>Open Phone Hub</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleConnect}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold shadow-sm transition-all"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Start Device Webcam</span>
+                  </button>
+
+                  <button
+                    onClick={() => switchSource('phone_ip')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand-secondary hover:bg-brand-card text-brand-primaryText text-xs font-medium border border-brand-border transition-colors"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-brand-accent" />
+                    <span>Switch to Rover IP Cam</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
 
-        {/* Diagnostics & Remote Resolution Tuning Drawer */}
+        {/* Diagnostics Drawer */}
         {showDiagnostics && (
           <div className="absolute top-3 right-3 w-80 bg-brand-secondary/95 border border-brand-border rounded-xl p-4 text-xs font-sans text-brand-secondaryText space-y-3 shadow-2xl backdrop-blur-md z-30">
             <div className="font-semibold text-brand-primaryText flex items-center justify-between pb-2 border-b border-brand-border">
@@ -1021,45 +1313,46 @@ export default function LiveCameraFeed({
                 <Gauge className="w-4 h-4 text-brand-accent" />
                 <span>Camera Diagnostics</span>
               </span>
-              <span className="text-brand-success font-mono font-bold">{frameLatency}ms</span>
+              <span className="text-brand-success font-bold">{frameLatency}ms</span>
             </div>
 
-            <div className="space-y-2">
-              <span className="text-xs font-medium text-brand-primaryText">Resolution & Latency:</span>
-              <div className="grid grid-cols-3 gap-1.5">
-                <button
-                  onClick={() => setRemoteOptimization('640x480', 25)}
-                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                    resPreset === '640x480'
-                      ? 'bg-brand-success text-brand-bg border-brand-success font-semibold'
-                      : 'bg-brand-bg hover:bg-brand-card text-brand-success border-brand-success/40'
-                  }`}
-                  title="640x480 @ Quality 25 - Lowest possible latency"
-                >
-                  Turbo (640p)
-                </button>
-                <button
-                  onClick={() => setRemoteOptimization('800x480', 35)}
-                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                    resPreset === '800x480'
-                      ? 'bg-brand-accent text-brand-bg border-brand-accent font-semibold'
-                      : 'bg-brand-bg hover:bg-brand-card text-brand-accent border-brand-border'
-                  }`}
-                >
-                  Balanced
-                </button>
-                <button
-                  onClick={() => setRemoteOptimization('1280x720', 40)}
-                  className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                    resPreset === '1280x720'
-                      ? 'bg-brand-primaryText text-brand-bg border-brand-primaryText font-semibold'
-                      : 'bg-brand-bg hover:bg-brand-card text-brand-secondaryText border-brand-border'
-                  }`}
-                >
-                  720p HD
-                </button>
+            {sourceType === 'phone_ip' && (
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-brand-primaryText">Remote Resolution:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    onClick={() => setRemoteOptimization('640x480', 25)}
+                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                      resPreset === '640x480'
+                        ? 'bg-brand-success text-brand-bg border-brand-success font-semibold'
+                        : 'bg-brand-bg hover:bg-brand-card text-brand-success border-brand-success/40'
+                    }`}
+                  >
+                    Turbo (640p)
+                  </button>
+                  <button
+                    onClick={() => setRemoteOptimization('800x480', 35)}
+                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                      resPreset === '800x480'
+                        ? 'bg-brand-accent text-brand-bg border-brand-accent font-semibold'
+                        : 'bg-brand-bg hover:bg-brand-card text-brand-accent border-brand-border'
+                    }`}
+                  >
+                    Balanced
+                  </button>
+                  <button
+                    onClick={() => setRemoteOptimization('1280x720', 40)}
+                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                      resPreset === '1280x720'
+                        ? 'bg-brand-primaryText text-brand-bg border-brand-primaryText font-semibold'
+                        : 'bg-brand-bg hover:bg-brand-card text-brand-secondaryText border-brand-border'
+                    }`}
+                  >
+                    720p HD
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* AI Human Detection Status Drawer Section */}
             <div className="space-y-1.5 pt-2 border-t border-brand-border text-xs">
@@ -1071,7 +1364,7 @@ export default function LiveCameraFeed({
               </div>
               <div className="flex justify-between">
                 <span>Inference Time:</span>
-                <span className="text-brand-success font-mono">{inferenceLatency} ms</span>
+                <span className="text-brand-success">{inferenceLatency} ms</span>
               </div>
               <div className="flex justify-between">
                 <span>Humans Detected:</span>
@@ -1082,26 +1375,28 @@ export default function LiveCameraFeed({
               {detectedHumans.length > 0 && (
                 <div className="flex justify-between">
                   <span>Nearest Distance:</span>
-                  <span className="text-brand-success font-mono">{Math.min(...detectedHumans.map(d => d.distanceMeters))} m</span>
+                  <span className="text-brand-success">{Math.min(...detectedHumans.map(d => d.distanceMeters))} m</span>
                 </div>
               )}
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-brand-border text-xs">
               <div className="flex justify-between">
-                <span>Active Engine:</span>
+                <span>Active Source:</span>
                 <span className="text-brand-primaryText font-medium">
-                  {renderMode === 'canvas_fast' ? 'Direct Canvas Loop' : 'MJPEG Stream'}
+                  {sourceType === 'device_cam' ? 'Local Device Webcam' : 'Rover IP Cam'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Frame Rate:</span>
-                <span className="text-brand-accent font-mono">{fps} FPS</span>
+                <span className="text-brand-accent">{fps} FPS</span>
               </div>
-              <div className="flex justify-between">
-                <span>Camera Host:</span>
-                <span className="text-brand-success font-mono">{getBaseHost()}</span>
-              </div>
+              {sourceType === 'phone_ip' && (
+                <div className="flex justify-between">
+                  <span>Camera Host:</span>
+                  <span className="text-brand-success font-mono truncate max-w-[170px]">{getBaseHost()}</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1110,18 +1405,28 @@ export default function LiveCameraFeed({
       {/* Bottom Controls Bar */}
       <div className="p-3 bg-brand-secondary border-t border-brand-border flex flex-col gap-2.5 shrink-0">
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={streamUrl}
-            onChange={(e) => setStreamUrl(e.target.value)}
-            placeholder="http://192.168.4.57:8080"
-            className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
-          />
+          {sourceType === 'phone_ip' ? (
+            <input
+              type="text"
+              value={streamUrl}
+              onChange={(e) => setStreamUrl(e.target.value)}
+              placeholder="http://192.168.4.57:8080"
+              className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs font-mono text-brand-primaryText placeholder-brand-secondaryText/40 focus:outline-none focus:border-brand-accent"
+            />
+          ) : (
+            <div className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-secondaryText flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-brand-primaryText font-medium">
+                <Laptop className="w-4 h-4 text-brand-accent" />
+                <span>Internal / USB Device Webcam Feed</span>
+              </span>
+              <span className="text-brand-success text-[11px] font-medium">Auto-Negotiated 640×480</span>
+            </div>
+          )}
           
           {isFeedActive ? (
             <button
               onClick={handleDisconnect}
-              className="px-4 py-2 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-2 bg-brand-card hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/40 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors font-sans"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
               <span>Disconnect</span>
@@ -1129,7 +1434,7 @@ export default function LiveCameraFeed({
           ) : (
             <button
               onClick={handleConnect}
-              className="px-4 py-2 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded-lg text-xs font-semibold whitespace-nowrap shadow-sm flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-2 bg-brand-accent hover:bg-brand-accent-hover text-brand-bg rounded-lg text-xs font-semibold whitespace-nowrap shadow-sm flex items-center gap-1.5 transition-colors font-sans"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>Connect Feed</span>
@@ -1137,31 +1442,48 @@ export default function LiveCameraFeed({
           )}
         </div>
 
-        {/* Quick Optimization Buttons */}
+        {/* Quick Presets & Status */}
         <div className="flex flex-wrap items-center justify-between text-xs text-brand-secondaryText gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-brand-primaryText font-medium flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 text-brand-warning" />
-              <span>Latency Presets:</span>
-            </span>
-            <button
-              onClick={() => setRemoteOptimization('640x480', 25)}
-              className="px-2.5 py-1 rounded-md bg-brand-bg border border-brand-success/50 text-brand-success hover:bg-brand-success hover:text-brand-bg transition-colors font-medium"
-              title="Set camera to 640x480 for ultra-low latency"
-            >
-              640×480 Turbo (Fastest)
-            </button>
-            <button
-              onClick={() => setRemoteOptimization('800x480', 35)}
-              className="px-2.5 py-1 rounded-md bg-brand-bg border border-brand-border hover:border-brand-accent hover:text-brand-accent transition-colors"
-            >
-              800×480 Balanced
-            </button>
-          </div>
+          {sourceType === 'phone_ip' ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-brand-primaryText font-medium flex items-center gap-1 text-[11px]">
+                <Flame className="w-3 h-3 text-brand-warning" />
+                <span>Presets:</span>
+              </span>
+              <button
+                onClick={() => {
+                  setStreamUrl('http://192.168.4.57:8080');
+                  setRemoteOptimization('640x480', 25);
+                }}
+                className="px-2 py-0.5 rounded bg-brand-bg border border-brand-border hover:border-brand-accent hover:text-brand-primaryText font-mono text-[10px] transition-colors"
+              >
+                192.168.4.57
+              </button>
+              <button
+                onClick={() => {
+                  setStreamUrl('http://192.168.137.1:8080');
+                  setRemoteOptimization('640x480', 25);
+                }}
+                className="px-2 py-0.5 rounded bg-brand-bg border border-brand-border hover:border-brand-accent hover:text-brand-primaryText font-mono text-[10px] transition-colors"
+                title="Default Windows Mobile Hotspot IP"
+              >
+                192.168.137.1 (Hotspot)
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-brand-accent text-xs">
+              <CheckCircle2 className="w-3.5 h-3.5 text-brand-success" />
+              <span>Device camera active for zero-latency testing</span>
+            </div>
+          )}
 
-          <div className="flex items-center gap-1.5 text-brand-success">
-            <Zap className="w-3.5 h-3.5" />
-            <span>Direct LAN Active</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => switchSource(sourceType === 'phone_ip' ? 'device_cam' : 'phone_ip')}
+              className="text-xs text-brand-accent hover:underline flex items-center gap-1"
+            >
+              <span>{sourceType === 'phone_ip' ? 'Switch to Webcam' : 'Switch to Rover Cam'}</span>
+            </button>
           </div>
         </div>
       </div>

@@ -18,12 +18,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL protocol' }, { status: 400 });
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
     const upstreamResponse = await fetch(urlParam, {
       cache: 'no-store',
+      signal: controller.signal,
       headers: {
         'Accept': 'multipart/x-mixed-replace; boundary=--boundarydonotcross, image/jpeg, image/webp, */*',
       },
     });
+    clearTimeout(timeoutId);
 
     if (!upstreamResponse.ok || !upstreamResponse.body) {
       return NextResponse.json({ 

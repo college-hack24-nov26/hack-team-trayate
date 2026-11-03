@@ -40,6 +40,9 @@ export default function MissionKeyboardControls() {
   const isMotorConfigured = Boolean(hardwareConfig.motorUrl);
   const isEStopped = telemetry.rover.eStopTriggered;
 
+  // Set of currently held movement keys for butter-smooth multi-key locomotion
+  const heldKeysRef = useRef<Set<string>>(new Set());
+
   // Start continuous locomotion or rotation (fires immediately + loops every 100ms while held)
   const startContinuousMovement = useCallback((dir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT', keyLabel?: string) => {
     if (telemetry.rover.eStopTriggered) return;
@@ -90,6 +93,16 @@ export default function MissionKeyboardControls() {
     }
   }, [sendMovementCommand]);
 
+  // Helper to map key string to direction
+  const keyToDirection = (key: string): { dir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | null; label: string } => {
+    const k = key.toLowerCase();
+    if (k === 'w' || key === 'ArrowUp') return { dir: 'FORWARD', label: 'ArrowUp' };
+    if (k === 's' || key === 'ArrowDown') return { dir: 'BACKWARD', label: 'ArrowDown' };
+    if (k === 'a' || key === 'ArrowLeft') return { dir: 'LEFT', label: 'ArrowLeft' };
+    if (k === 'd' || key === 'ArrowRight') return { dir: 'RIGHT', label: 'ArrowRight' };
+    return { dir: null, label: '' };
+  };
+
   // Key Down Handler
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // 1. Never intercept when operator is typing in an input or textarea
@@ -101,6 +114,7 @@ export default function MissionKeyboardControls() {
     // 2. Emergency Stop on SPACEBAR
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
+      heldKeysRef.current.clear();
       stopContinuousMovement();
       triggerEStop();
       setPressedKey('SPACE');
@@ -108,30 +122,16 @@ export default function MissionKeyboardControls() {
     }
 
     // 3. Arrow Keys and WASD mapping
-    let targetDir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | null = null;
-    let keyName = '';
+    const { dir, label } = keyToDirection(e.key);
 
-    if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
-      targetDir = 'FORWARD';
-      keyName = 'ArrowUp';
-    } else if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
-      targetDir = 'BACKWARD';
-      keyName = 'ArrowDown';
-    } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
-      targetDir = 'LEFT';
-      keyName = 'ArrowLeft';
-    } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
-      targetDir = 'RIGHT';
-      keyName = 'ArrowRight';
-    }
-
-    if (targetDir) {
+    if (dir) {
       e.preventDefault(); // Prevent page scrolling
-      startContinuousMovement(targetDir, keyName);
+      heldKeysRef.current.add(e.key.toLowerCase());
+      startContinuousMovement(dir, label);
     }
   }, [startContinuousMovement, stopContinuousMovement, triggerEStop]);
 
-  // Key Up Handler (Deadman instantaneous stop on key release)
+  // Key Up Handler (Deadman instantaneous stop on key release or fallback to remaining held key)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) {
@@ -143,19 +143,32 @@ export default function MissionKeyboardControls() {
       return;
     }
 
-    const isMovementKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) ||
-      ['w', 'a', 's', 'd'].includes(e.key.toLowerCase());
+    const { dir } = keyToDirection(e.key);
 
-    if (isMovementKey) {
+    if (dir) {
       e.preventDefault();
+      heldKeysRef.current.delete(e.key.toLowerCase());
+
+      // If other movement keys are still being held down, transition smoothly to them
+      if (heldKeysRef.current.size > 0) {
+        const remainingKeys = Array.from(heldKeysRef.current);
+        const lastKey = remainingKeys[remainingKeys.length - 1];
+        const nextTarget = keyToDirection(lastKey);
+        if (nextTarget.dir) {
+          startContinuousMovement(nextTarget.dir, nextTarget.label);
+          return;
+        }
+      }
+
       stopContinuousMovement();
     }
-  }, [stopContinuousMovement]);
+  }, [startContinuousMovement, stopContinuousMovement]);
 
   // Safety Window Event Listeners:
   // Immediately stop movement if browser loses focus or tab is hidden
   useEffect(() => {
     const handleSafetyStop = () => {
+      heldKeysRef.current.clear();
       stopContinuousMovement();
     };
 
