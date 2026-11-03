@@ -208,9 +208,14 @@ export async function sendServoAngleCommand(angle: number, sensorUrlOverride?: s
   }
 }
 
+// Active motor command controller to cancel previous pending requests and eliminate lag
+let activeMotorAbortController: AbortController | null = null;
+let preferredMotorTransport: 'direct' | 'proxy' = 'direct';
+
 /**
  * Send movement command to ESP32-02 (Rover Motor Controller)
  * Endpoint: GET /move?direction=forward | backward | left | right | stop
+ * Optimized with fast-path transport and in-flight cancellation for zero-lag response
  */
 export async function sendMotorMovement(
   direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP',
@@ -228,44 +233,54 @@ export async function sendMotorMovement(
     };
   }
 
+  // Cancel any prior in-flight request to immediately free network socket
+  if (activeMotorAbortController) {
+    try {
+      activeMotorAbortController.abort();
+    } catch {
+      // Ignore abort errors
+    }
+  }
+
+  const controller = new AbortController();
+  activeMotorAbortController = controller;
+
   const cleanUrl = motorUrl.replace(/\/+$/, '');
   const dirParam = direction.toLowerCase(); // 'forward' | 'backward' | 'left' | 'right' | 'stop'
 
-  // Try direct fetch first
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
+  // Fast-path: Execute via preferred transport
+  if (preferredMotorTransport === 'direct') {
+    try {
+      const timeout = setTimeout(() => controller.abort(), 350);
+      const res = await fetch(`${cleanUrl}/move?direction=${dirParam}`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      clearTimeout(timeout);
 
-    const res = await fetch(`${cleanUrl}/move?direction=${dirParam}`, {
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json().catch(() => ({ success: true, direction: dirParam }));
-      return {
-        success: data.success ?? true,
-        message: `Command ${direction} acknowledged by ESP32-02`,
-        direction,
-      };
+      if (res.ok) {
+        const data = await res.json().catch(() => ({ success: true, direction: dirParam }));
+        return {
+          success: data.success ?? true,
+          message: `Command ${direction} acknowledged by ESP32-02`,
+          direction,
+        };
+      }
+    } catch {
+      // Direct LAN fetch failed or timed out; switch preferred transport to proxy
+      preferredMotorTransport = 'proxy';
     }
-  } catch {
-    // Direct fetch failed, fallback to server proxy
   }
 
-  // Fallback to Next.js server proxy
+  // Fallback or preferred server proxy (zero delay)
   try {
     const proxyUrl = `/api/esp32/proxy?base=${encodeURIComponent(cleanUrl)}&endpoint=/move&direction=${dirParam}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), 800);
 
     const res = await fetch(proxyUrl, {
       signal: controller.signal,
       cache: 'no-store',
     });
-
     clearTimeout(timeout);
 
     if (res.ok) {
@@ -283,6 +298,10 @@ export async function sendMotorMovement(
       };
     }
   } catch (err: unknown) {
+    const isAborted = err instanceof Error && err.name === 'AbortError';
+    if (isAborted) {
+      return { success: true, message: 'Superceded by newer command', direction };
+    }
     const errorMsg = err instanceof Error ? err.message : 'Motor controller unreachable';
     return {
       success: false,

@@ -64,6 +64,14 @@ export interface TelemetryState {
     resolution: string;
     format: string;
     lastPing: string;
+    humanDetection: {
+      enabled: boolean;
+      detected: boolean;
+      count: number;
+      confidence: number;
+      distanceEst: number;
+      lastDetectedTime: string | null;
+    };
   };
   ch4: SensorData;
   co: SensorData;
@@ -150,6 +158,14 @@ const initialTelemetry: TelemetryState = {
     resolution: '1280x720',
     format: 'MJPEG (Android IP Webcam)',
     lastPing: 'Awaiting feed',
+    humanDetection: {
+      enabled: true,
+      detected: false,
+      count: 0,
+      confidence: 0,
+      distanceEst: 0,
+      lastDetectedTime: null,
+    },
   },
   ch4: {
     label: 'Methane (MQ-4 RAW ADC)',
@@ -611,6 +627,37 @@ export function useTelemetry() {
     }));
   }, []);
 
+  const setHumanDetection = useCallback((data: { detected: boolean; count: number; confidence: number; distanceEst: number }) => {
+    setTelemetry((prev) => ({
+      ...prev,
+      camera: {
+        ...prev.camera,
+        humanDetection: {
+          ...prev.camera.humanDetection,
+          detected: data.detected,
+          count: data.count,
+          confidence: data.confidence,
+          distanceEst: data.distanceEst,
+          lastDetectedTime: data.detected ? new Date().toLocaleTimeString() : prev.camera.humanDetection.lastDetectedTime,
+        },
+      },
+    }));
+  }, []);
+
+  const toggleHumanDetection = useCallback((enabled?: boolean) => {
+    soundManager.playClickTone();
+    setTelemetry((prev) => ({
+      ...prev,
+      camera: {
+        ...prev.camera,
+        humanDetection: {
+          ...prev.camera.humanDetection,
+          enabled: enabled !== undefined ? enabled : !prev.camera.humanDetection.enabled,
+        },
+      },
+    }));
+  }, []);
+
   const toggleSoundMute = useCallback(() => {
     setTelemetry((prev) => {
       const nextMute = !prev.soundMuted;
@@ -635,6 +682,8 @@ export function useTelemetry() {
     setHardwareMode,
     setCameraUrl,
     setCameraStatus,
+    setHumanDetection,
+    toggleHumanDetection,
     toggleSoundMute,
   };
 }

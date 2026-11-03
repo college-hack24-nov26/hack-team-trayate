@@ -36,9 +36,62 @@ export default function MissionKeyboardControls() {
   const activeDirectionRef = useRef<'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP'>('STOP');
   activeDirectionRef.current = activeDirection;
 
+  // Continuous movement heartbeat timer
+  const continuousIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const hardwareConfig = getHardwareConfig();
   const isMotorConfigured = Boolean(hardwareConfig.motorUrl);
   const isEStopped = telemetry.rover.eStopTriggered;
+
+  // Start continuous locomotion or rotation (fires immediately + loops every 100ms while held)
+  const startContinuousMovement = useCallback((dir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT', keyLabel?: string) => {
+    if (telemetry.rover.eStopTriggered) return;
+
+    if (activeDirectionRef.current === dir && continuousIntervalRef.current) {
+      return;
+    }
+
+    if (continuousIntervalRef.current) {
+      clearInterval(continuousIntervalRef.current);
+      continuousIntervalRef.current = null;
+    }
+
+    soundManager.playClickTone();
+    activeDirectionRef.current = dir;
+    setActiveDirection(dir);
+    if (keyLabel) setPressedKey(keyLabel);
+
+    // 1. Dispatch initial command immediately (zero delay)
+    sendMovementCommand(dir);
+
+    // 2. Active continuous heartbeat (keeps motors rotating/driving smoothly while held)
+    continuousIntervalRef.current = setInterval(() => {
+      if (activeDirectionRef.current === dir) {
+        sendMovementCommand(dir);
+      } else {
+        if (continuousIntervalRef.current) {
+          clearInterval(continuousIntervalRef.current);
+          continuousIntervalRef.current = null;
+        }
+      }
+    }, 100);
+  }, [sendMovementCommand, telemetry.rover.eStopTriggered]);
+
+  // Stop continuous locomotion (clears heartbeat + fires STOP immediately)
+  const stopContinuousMovement = useCallback(() => {
+    if (continuousIntervalRef.current) {
+      clearInterval(continuousIntervalRef.current);
+      continuousIntervalRef.current = null;
+    }
+    if (activeDirectionRef.current !== 'STOP') {
+      activeDirectionRef.current = 'STOP';
+      setActiveDirection('STOP');
+      setPressedKey(null);
+      sendMovementCommand('STOP');
+    } else {
+      setPressedKey(null);
+    }
+  }, [sendMovementCommand]);
 
   // Key Down Handler
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -51,8 +104,8 @@ export default function MissionKeyboardControls() {
     // 2. Emergency Stop on SPACEBAR
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
+      stopContinuousMovement();
       triggerEStop();
-      setActiveDirection('STOP');
       setPressedKey('SPACE');
       return;
     }
@@ -77,14 +130,9 @@ export default function MissionKeyboardControls() {
 
     if (targetDir) {
       e.preventDefault(); // Prevent page scrolling!
-      if (activeDirectionRef.current !== targetDir) {
-        soundManager.playClickTone();
-        setActiveDirection(targetDir);
-        setPressedKey(keyName);
-        sendMovementCommand(targetDir);
-      }
+      startContinuousMovement(targetDir, keyName);
     }
-  }, [sendMovementCommand, triggerEStop]);
+  }, [startContinuousMovement, stopContinuousMovement, triggerEStop]);
 
   // Key Up Handler (Deadman instantaneous stop on key release)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -103,19 +151,15 @@ export default function MissionKeyboardControls() {
 
     if (isMovementKey) {
       e.preventDefault();
-      setActiveDirection('STOP');
-      setPressedKey(null);
-      sendMovementCommand('STOP');
+      stopContinuousMovement();
     }
-  }, [sendMovementCommand]);
+  }, [stopContinuousMovement]);
 
   // Safety Window Event Listeners:
   // Immediately stop movement if browser loses focus or tab is hidden!
   useEffect(() => {
     const handleSafetyStop = () => {
-      setActiveDirection('STOP');
-      setPressedKey(null);
-      sendMovementCommand('STOP');
+      stopContinuousMovement();
     };
 
     const handleVisibilityChange = () => {
@@ -126,16 +170,23 @@ export default function MissionKeyboardControls() {
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mouseup', handleSafetyStop);
+    window.addEventListener('touchend', handleSafetyStop);
     window.addEventListener('blur', handleSafetyStop);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (continuousIntervalRef.current) {
+        clearInterval(continuousIntervalRef.current);
+      }
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mouseup', handleSafetyStop);
+      window.removeEventListener('touchend', handleSafetyStop);
       window.removeEventListener('blur', handleSafetyStop);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [handleKeyDown, handleKeyUp, sendMovementCommand]);
+  }, [handleKeyDown, handleKeyUp, stopContinuousMovement]);
 
   return (
     <div className="bg-brand-card border border-brand-border rounded-xl flex flex-col h-full overflow-hidden">
@@ -232,12 +283,13 @@ export default function MissionKeyboardControls() {
           {/* Forward (ArrowUp / W) */}
           <div className="flex justify-center">
             <button
-              onMouseDown={() => { setActiveDirection('FORWARD'); sendMovementCommand('FORWARD'); }}
-              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
-              onTouchStart={() => { setActiveDirection('FORWARD'); sendMovementCommand('FORWARD'); }}
-              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onMouseDown={() => startContinuousMovement('FORWARD', 'ArrowUp')}
+              onMouseUp={() => stopContinuousMovement()}
+              onMouseLeave={() => { if (activeDirectionRef.current === 'FORWARD') stopContinuousMovement(); }}
+              onTouchStart={(e) => { e.preventDefault(); startContinuousMovement('FORWARD', 'ArrowUp'); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopContinuousMovement(); }}
               disabled={isEStopped}
-              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
+              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md select-none ${
                 pressedKey === 'ArrowUp' || activeDirection === 'FORWARD'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
@@ -253,12 +305,13 @@ export default function MissionKeyboardControls() {
             
             {/* Left (ArrowLeft / A) */}
             <button
-              onMouseDown={() => { setActiveDirection('LEFT'); sendMovementCommand('LEFT'); }}
-              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
-              onTouchStart={() => { setActiveDirection('LEFT'); sendMovementCommand('LEFT'); }}
-              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onMouseDown={() => startContinuousMovement('LEFT', 'ArrowLeft')}
+              onMouseUp={() => stopContinuousMovement()}
+              onMouseLeave={() => { if (activeDirectionRef.current === 'LEFT') stopContinuousMovement(); }}
+              onTouchStart={(e) => { e.preventDefault(); startContinuousMovement('LEFT', 'ArrowLeft'); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopContinuousMovement(); }}
               disabled={isEStopped}
-              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
+              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md select-none ${
                 pressedKey === 'ArrowLeft' || activeDirection === 'LEFT'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
@@ -270,8 +323,8 @@ export default function MissionKeyboardControls() {
 
             {/* STOP Button */}
             <button
-              onClick={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
-              className="w-14 h-14 rounded-lg border-2 border-brand-border bg-brand-bg hover:bg-brand-secondary text-brand-danger font-mono font-bold flex flex-col items-center justify-center transition-all shadow-md active:scale-95"
+              onClick={() => stopContinuousMovement()}
+              className="w-14 h-14 rounded-lg border-2 border-brand-border bg-brand-bg hover:bg-brand-secondary text-brand-danger font-mono font-bold flex flex-col items-center justify-center transition-all shadow-md active:scale-95 select-none"
               title="Stop Rover Locomotion"
             >
               <Square className="w-4 h-4 fill-current leading-none" />
@@ -280,12 +333,13 @@ export default function MissionKeyboardControls() {
 
             {/* Right (ArrowRight / D) */}
             <button
-              onMouseDown={() => { setActiveDirection('RIGHT'); sendMovementCommand('RIGHT'); }}
-              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
-              onTouchStart={() => { setActiveDirection('RIGHT'); sendMovementCommand('RIGHT'); }}
-              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onMouseDown={() => startContinuousMovement('RIGHT', 'ArrowRight')}
+              onMouseUp={() => stopContinuousMovement()}
+              onMouseLeave={() => { if (activeDirectionRef.current === 'RIGHT') stopContinuousMovement(); }}
+              onTouchStart={(e) => { e.preventDefault(); startContinuousMovement('RIGHT', 'ArrowRight'); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopContinuousMovement(); }}
               disabled={isEStopped}
-              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
+              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md select-none ${
                 pressedKey === 'ArrowRight' || activeDirection === 'RIGHT'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
@@ -299,12 +353,13 @@ export default function MissionKeyboardControls() {
           {/* Backward (ArrowDown / S) */}
           <div className="flex justify-center">
             <button
-              onMouseDown={() => { setActiveDirection('BACKWARD'); sendMovementCommand('BACKWARD'); }}
-              onMouseUp={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
-              onTouchStart={() => { setActiveDirection('BACKWARD'); sendMovementCommand('BACKWARD'); }}
-              onTouchEnd={() => { setActiveDirection('STOP'); sendMovementCommand('STOP'); }}
+              onMouseDown={() => startContinuousMovement('BACKWARD', 'ArrowDown')}
+              onMouseUp={() => stopContinuousMovement()}
+              onMouseLeave={() => { if (activeDirectionRef.current === 'BACKWARD') stopContinuousMovement(); }}
+              onTouchStart={(e) => { e.preventDefault(); startContinuousMovement('BACKWARD', 'ArrowDown'); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopContinuousMovement(); }}
               disabled={isEStopped}
-              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md ${
+              className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-mono font-bold transition-all shadow-md select-none ${
                 pressedKey === 'ArrowDown' || activeDirection === 'BACKWARD'
                   ? 'bg-brand-accent text-brand-bg border-brand-accent scale-95 shadow-[0_0_15px_rgba(56,189,248,0.5)]'
                   : 'bg-brand-secondary border-brand-border text-brand-primaryText hover:border-brand-accent/50'
