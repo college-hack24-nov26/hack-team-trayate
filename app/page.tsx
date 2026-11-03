@@ -79,7 +79,7 @@ export default function LandingPage() {
                 </Link>
 
                 <Link
-                  href="/dashboard"
+                  href="/dashboard/mission"
                   className="inline-flex items-center gap-2 px-6 py-3.5 rounded-lg font-semibold text-sm bg-brand-card hover:bg-brand-secondary text-brand-primaryText border border-brand-border hover:border-brand-accent transition-all duration-200 active:scale-[0.98]"
                 >
                   <span>Launch Command Centre</span>
@@ -627,7 +627,7 @@ export default function LandingPage() {
 
           <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/dashboard"
+              href="/dashboard/mission"
               className="inline-flex items-center gap-2 px-8 py-4 rounded-lg font-semibold text-base bg-brand-accent hover:bg-brand-accent-hover text-brand-bg transition-all duration-200 shadow-cyan-glow active:scale-[0.98]"
             >
               <span>Enter Command Centre</span>

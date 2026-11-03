@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { soundManager } from './soundAlerts';
 
 export interface SensorData {
   value: number;
@@ -14,14 +15,37 @@ export interface SensorData {
 }
 
 export interface TelemetryState {
+  mission: {
+    id: string;
+    name: string;
+    status: 'ACTIVE' | 'PAUSED' | 'ABORTED' | 'COMPLETED';
+    startTime: string;
+    elapsedSeconds: number;
+  };
+  hardwareMode: 'SIMULATOR' | 'LIVE_HARDWARE';
+  camera: {
+    url: string;
+    status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
+    fps: number;
+    latencyMs: number;
+    resolution: string;
+    format: string;
+    lastPing: string;
+  };
   ch4: SensorData;
   co: SensorData;
   co2: SensorData;
   o2: SensorData;
   temp: SensorData;
   humidity: SensorData;
+  pressure: SensorData;
   pm25: SensorData;
   pm10: SensorData;
+  imu: {
+    pitchDeg: number;
+    rollDeg: number;
+    yawDeg: number;
+  };
   dustCleaner: {
     status: 'ACTIVE' | 'STANDBY' | 'PURGING' | 'OFFLINE';
     mode: 'AUTO' | 'MANUAL';
@@ -39,10 +63,13 @@ export interface TelemetryState {
     latencyMs: number;
     depthMeters: number;
     speedMps: number;
+    speedGovernorPercent: number;
     headingDeg: number;
     mode: 'MANUAL' | 'AUTONOMOUS';
     currentMovement: 'STOP' | 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT';
     eStopTriggered: boolean;
+    lastMovementCommandTimestamp: number;
+    deadmanExpired: boolean;
     position: { x: number; y: number };
     trail: Array<{ x: number; y: number }>;
   };
@@ -52,10 +79,29 @@ export interface TelemetryState {
     isDemo: boolean;
     brokerUrl: string;
     lastPing: string;
+    connectedEsp32Count: number;
   };
+  soundMuted: boolean;
 }
 
 const initialTelemetry: TelemetryState = {
+  mission: {
+    id: 'TR-MIS-2026-084',
+    name: 'Sector 4 Sub-Drift Reconnaissance',
+    status: 'ACTIVE',
+    startTime: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    elapsedSeconds: 2540,
+  },
+  hardwareMode: 'SIMULATOR',
+  camera: {
+    url: 'http://192.168.1.100:8080/video',
+    status: 'DISCONNECTED',
+    fps: 30,
+    latencyMs: 38,
+    resolution: '1280x720',
+    format: 'MJPEG (Android IP Webcam)',
+    lastPing: 'Awaiting feed',
+  },
   ch4: {
     label: 'Methane (CH4)',
     value: 0.12,
@@ -116,6 +162,16 @@ const initialTelemetry: TelemetryState = {
     minSafe: 30,
     maxSafe: 80,
   },
+  pressure: {
+    label: 'Barometric Pressure',
+    value: 1018.4,
+    unit: 'hPa',
+    status: 'safe',
+    trend: [1017.9, 1018.1, 1018.3, 1018.5, 1018.4, 1018.4],
+    lastUpdated: 'Just now',
+    minSafe: 980,
+    maxSafe: 1050,
+  },
   pm25: {
     label: 'Fine Particulates (PM2.5)',
     value: 28,
@@ -136,6 +192,11 @@ const initialTelemetry: TelemetryState = {
     minSafe: 0,
     maxSafe: 150,
   },
+  imu: {
+    pitchDeg: -1.4,
+    rollDeg: 2.1,
+    yawDeg: 278.0,
+  },
   dustCleaner: {
     status: 'STANDBY',
     mode: 'AUTO',
@@ -153,10 +214,13 @@ const initialTelemetry: TelemetryState = {
     latencyMs: 12,
     depthMeters: -428.5,
     speedMps: 0.0,
+    speedGovernorPercent: 65,
     headingDeg: 278,
     mode: 'MANUAL',
     currentMovement: 'STOP',
     eStopTriggered: false,
+    lastMovementCommandTimestamp: Date.now(),
+    deadmanExpired: false,
     position: { x: 340, y: 220 },
     trail: [
       { x: 120, y: 150 },
@@ -172,25 +236,48 @@ const initialTelemetry: TelemetryState = {
     isDemo: true, // Display DEMO DATA badge clearly
     brokerUrl: 'wss://telemetry.trayate.systems/mqtt',
     lastPing: '2s ago',
+    connectedEsp32Count: 4,
   },
+  soundMuted: false,
 };
 
 export function useTelemetry() {
   const [telemetry, setTelemetry] = useState<TelemetryState>(initialTelemetry);
+  const deadmanTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Mission timer & simulation tick
   useEffect(() => {
     const interval = setInterval(() => {
       setTelemetry((prev) => {
-        // Natural telemetry jitter
+        const nextElapsed = prev.mission.elapsedSeconds + 1;
+
+        if (prev.hardwareMode === 'LIVE_HARDWARE') {
+          // When in live hardware mode and no direct hardware packet is delivered,
+          // maintain true empty state / un-jittered values to avoid fake data
+          return {
+            ...prev,
+            mission: {
+              ...prev.mission,
+              elapsedSeconds: nextElapsed,
+            },
+          };
+        }
+
+        // Natural telemetry jitter for simulation mode
         const ch4Jitter = Number((0.11 + Math.random() * 0.03).toFixed(2));
         const coJitter = Math.floor(7 + Math.random() * 3);
         const o2Jitter = Number((20.7 + Math.random() * 0.2).toFixed(1));
         const tempJitter = Number((24.1 + Math.random() * 0.3).toFixed(1));
         const humJitter = Number((62.0 + Math.random() * 0.8).toFixed(1));
         const pm10Jitter = Math.floor(60 + Math.random() * 8);
+        const batteryVoltJitter = Number((24.7 + Math.random() * 0.2).toFixed(1));
 
         return {
           ...prev,
+          mission: {
+            ...prev.mission,
+            elapsedSeconds: nextElapsed,
+          },
           ch4: {
             ...prev.ch4,
             value: ch4Jitter,
@@ -227,26 +314,95 @@ export function useTelemetry() {
             trend: [...prev.pm10.trend.slice(1), pm10Jitter],
             lastUpdated: '1s ago',
           },
+          rover: {
+            ...prev.rover,
+            batteryVoltage: batteryVoltJitter,
+          },
         };
       });
-    }, 2800);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const sendMovementCommand = (direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP') => {
-    if (telemetry.rover.eStopTriggered) return;
-    setTelemetry((prev) => ({
-      ...prev,
-      rover: {
-        ...prev.rover,
-        currentMovement: direction,
-        speedMps: direction === 'STOP' ? 0.0 : 0.8,
-      },
-    }));
-  };
+  // Deadman watchdog: If movement is active but no keep-alive received within 800ms, force halt
+  const resetDeadmanWatchdog = useCallback(() => {
+    if (deadmanTimerRef.current) {
+      clearTimeout(deadmanTimerRef.current);
+    }
+    deadmanTimerRef.current = setTimeout(() => {
+      setTelemetry((prev) => {
+        if (prev.rover.currentMovement !== 'STOP') {
+          return {
+            ...prev,
+            rover: {
+              ...prev.rover,
+              currentMovement: 'STOP',
+              speedMps: 0.0,
+              deadmanExpired: true,
+            },
+          };
+        }
+        return prev;
+      });
+    }, 800);
+  }, []);
 
-  const triggerEStop = () => {
+  // Movement command dispatcher with deadman protection & E-stop interlock
+  const sendMovementCommand = useCallback((direction: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT' | 'STOP') => {
+    setTelemetry((prev) => {
+      // E-stop safety interlock or disconnected safety
+      if (prev.rover.eStopTriggered || prev.rover.connectivity === 'OFFLINE') {
+        return prev;
+      }
+
+      const governorMultiplier = prev.rover.speedGovernorPercent / 100;
+      const targetSpeed = direction === 'STOP' ? 0.0 : Number((1.2 * governorMultiplier).toFixed(2));
+      
+      // Compute heading delta
+      let nextHeading = prev.rover.headingDeg;
+      if (direction === 'LEFT') nextHeading = (nextHeading - 5 + 360) % 360;
+      if (direction === 'RIGHT') nextHeading = (nextHeading + 5) % 360;
+
+      // Compute position delta
+      let nextX = prev.rover.position.x;
+      let nextY = prev.rover.position.y;
+      if (direction === 'FORWARD') {
+        const rad = (nextHeading * Math.PI) / 180;
+        nextX += Math.cos(rad) * 4 * governorMultiplier;
+        nextY += Math.sin(rad) * 4 * governorMultiplier;
+      } else if (direction === 'BACKWARD') {
+        const rad = (nextHeading * Math.PI) / 180;
+        nextX -= Math.cos(rad) * 3 * governorMultiplier;
+        nextY -= Math.sin(rad) * 3 * governorMultiplier;
+      }
+
+      const nextTrail = direction !== 'STOP' 
+        ? [...prev.rover.trail.slice(-40), { x: Math.round(nextX), y: Math.round(nextY) }]
+        : prev.rover.trail;
+
+      return {
+        ...prev,
+        rover: {
+          ...prev.rover,
+          currentMovement: direction,
+          speedMps: targetSpeed,
+          headingDeg: nextHeading,
+          position: { x: Math.round(nextX), y: Math.round(nextY) },
+          trail: nextTrail,
+          lastMovementCommandTimestamp: Date.now(),
+          deadmanExpired: false,
+        },
+      };
+    });
+
+    if (direction !== 'STOP') {
+      resetDeadmanWatchdog();
+    }
+  }, [resetDeadmanWatchdog]);
+
+  const triggerEStop = useCallback(() => {
+    soundManager.playCriticalAlarm();
     setTelemetry((prev) => ({
       ...prev,
       rover: {
@@ -256,19 +412,45 @@ export function useTelemetry() {
         speedMps: 0.0,
       },
     }));
-  };
+  }, []);
 
-  const resetEStop = () => {
+  const resetEStop = useCallback(() => {
+    soundManager.playClickTone();
     setTelemetry((prev) => ({
       ...prev,
       rover: {
         ...prev.rover,
         eStopTriggered: false,
+        deadmanExpired: false,
       },
     }));
-  };
+  }, []);
 
-  const toggleDustCleaner = () => {
+  const setSpeedGovernor = useCallback((percent: number) => {
+    setTelemetry((prev) => ({
+      ...prev,
+      rover: {
+        ...prev.rover,
+        speedGovernorPercent: Math.max(10, Math.min(100, percent)),
+      },
+    }));
+  }, []);
+
+  const setMovementMode = useCallback((mode: 'MANUAL' | 'AUTONOMOUS') => {
+    soundManager.playClickTone();
+    setTelemetry((prev) => ({
+      ...prev,
+      rover: {
+        ...prev.rover,
+        mode,
+        currentMovement: 'STOP',
+        speedMps: 0.0,
+      },
+    }));
+  }, []);
+
+  const toggleDustCleaner = useCallback(() => {
+    soundManager.playClickTone();
     setTelemetry((prev) => ({
       ...prev,
       dustCleaner: {
@@ -276,9 +458,9 @@ export function useTelemetry() {
         status: prev.dustCleaner.status === 'ACTIVE' ? 'STANDBY' : 'ACTIVE',
       },
     }));
-  };
+  }, []);
 
-  const setDustCleanerMode = (mode: 'AUTO' | 'MANUAL') => {
+  const setDustCleanerMode = useCallback((mode: 'AUTO' | 'MANUAL') => {
     setTelemetry((prev) => ({
       ...prev,
       dustCleaner: {
@@ -286,15 +468,64 @@ export function useTelemetry() {
         mode,
       },
     }));
-  };
+  }, []);
+
+  const setHardwareMode = useCallback((mode: 'SIMULATOR' | 'LIVE_HARDWARE') => {
+    soundManager.playClickTone();
+    setTelemetry((prev) => ({
+      ...prev,
+      hardwareMode: mode,
+      connections: {
+        ...prev.connections,
+        isDemo: mode === 'SIMULATOR',
+      },
+    }));
+  }, []);
+
+  const setCameraUrl = useCallback((url: string) => {
+    setTelemetry((prev) => ({
+      ...prev,
+      camera: {
+        ...prev.camera,
+        url,
+      },
+    }));
+  }, []);
+
+  const setCameraStatus = useCallback((status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR') => {
+    setTelemetry((prev) => ({
+      ...prev,
+      camera: {
+        ...prev.camera,
+        status,
+        lastPing: status === 'CONNECTED' ? 'Live 30 FPS' : 'Offline',
+      },
+    }));
+  }, []);
+
+  const toggleSoundMute = useCallback(() => {
+    setTelemetry((prev) => {
+      const nextMute = !prev.soundMuted;
+      soundManager.setMuted(nextMute);
+      return {
+        ...prev,
+        soundMuted: nextMute,
+      };
+    });
+  }, []);
 
   return {
     telemetry,
     sendMovementCommand,
     triggerEStop,
     resetEStop,
+    setSpeedGovernor,
+    setMovementMode,
     toggleDustCleaner,
     setDustCleanerMode,
+    setHardwareMode,
+    setCameraUrl,
+    setCameraStatus,
+    toggleSoundMute,
   };
 }
-
