@@ -44,6 +44,20 @@ export interface DeviceHealth {
 
 const STORAGE_KEY = 'trayate_hardware_config';
 
+/**
+ * Normalizes any IP or URL input from operator
+ * Examples: '192.168.4.88' -> 'http://192.168.4.88'
+ *           'http://192.168.137.71/' -> 'http://192.168.137.71'
+ */
+export function normalizeEspUrl(input: string): string {
+  if (!input || !input.trim()) return '';
+  let clean = input.trim();
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+    clean = `http://${clean}`;
+  }
+  return clean.replace(/\/+$/, '');
+}
+
 export function getHardwareConfig(): HardwareClusterConfig {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -51,9 +65,9 @@ export function getHardwareConfig(): HardwareClusterConfig {
       try {
         const parsed = JSON.parse(saved);
         return {
-          sensorUrl: parsed.sensorUrl || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71',
-          motorUrl: parsed.motorUrl || process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221',
-          edgeUrl: parsed.edgeUrl || process.env.NEXT_PUBLIC_ROVER_EDGE_URL || '',
+          sensorUrl: normalizeEspUrl(parsed.sensorUrl || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71'),
+          motorUrl: normalizeEspUrl(parsed.motorUrl || process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221'),
+          edgeUrl: parsed.edgeUrl ? normalizeEspUrl(parsed.edgeUrl) : '',
         };
       } catch {
         // Fallback
@@ -62,15 +76,69 @@ export function getHardwareConfig(): HardwareClusterConfig {
   }
 
   return {
-    sensorUrl: process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71',
-    motorUrl: process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221',
-    edgeUrl: process.env.NEXT_PUBLIC_ROVER_EDGE_URL || '',
+    sensorUrl: normalizeEspUrl(process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71'),
+    motorUrl: normalizeEspUrl(process.env.NEXT_PUBLIC_ROVER_MOTOR_URL || 'http://192.168.137.221'),
+    edgeUrl: process.env.NEXT_PUBLIC_ROVER_EDGE_URL ? normalizeEspUrl(process.env.NEXT_PUBLIC_ROVER_EDGE_URL) : '',
   };
 }
 
 export function saveHardwareConfig(config: HardwareClusterConfig) {
+  const normalized: HardwareClusterConfig = {
+    sensorUrl: normalizeEspUrl(config.sensorUrl),
+    motorUrl: normalizeEspUrl(config.motorUrl),
+    edgeUrl: config.edgeUrl ? normalizeEspUrl(config.edgeUrl) : '',
+  };
+
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    // Broadcast change to all active components and telemetry polling loop
+    window.dispatchEvent(new CustomEvent('trayate_hardware_config_updated', { detail: normalized }));
+  }
+
+  return normalized;
+}
+
+export interface PingEspResult {
+  ok: boolean;
+  url: string;
+  latencyMs?: number;
+  message: string;
+  detectedRole?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any;
+  hostIps?: { name: string; ip: string; type: string }[];
+}
+
+/**
+ * Live connectivity tester for any ESP32 IP entered by user
+ */
+export async function pingEsp32Target(ipOrUrl: string, type: 'sensor' | 'motor' = 'sensor'): Promise<PingEspResult> {
+  const normalized = normalizeEspUrl(ipOrUrl);
+  if (!normalized) {
+    return { ok: false, url: '', message: 'Please enter an IP address or hostname.' };
+  }
+
+  try {
+    const res = await fetch(`/api/esp32/ping?url=${encodeURIComponent(normalized)}&type=${type}`, {
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    return {
+      ok: Boolean(data.ok),
+      url: normalized,
+      latencyMs: data.latencyMs,
+      message: data.message,
+      detectedRole: data.detectedRole,
+      payload: data.payload,
+      hostIps: data.hostIps,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Network test error';
+    return {
+      ok: false,
+      url: normalized,
+      message: `Failed to ping ${normalized}: ${msg}`,
+    };
   }
 }
 
@@ -81,7 +149,7 @@ export function saveHardwareConfig(config: HardwareClusterConfig) {
  */
 export async function fetchLiveSensorData(sensorUrlOverride?: string): Promise<ESP32SensorResponse> {
   const config = getHardwareConfig();
-  const baseUrl = (sensorUrlOverride || config.sensorUrl || 'http://192.168.137.71').replace(/\/+$/, '');
+  const baseUrl = normalizeEspUrl(sensorUrlOverride || config.sensorUrl || 'http://192.168.137.71');
   const startTime = Date.now();
 
   // Try direct fetch first

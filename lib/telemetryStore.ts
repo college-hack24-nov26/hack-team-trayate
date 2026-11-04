@@ -8,6 +8,8 @@ import {
   sendMotorMovement, 
   triggerHardwareEmergencyStop,
   getHardwareConfig,
+  saveHardwareConfig,
+  HardwareClusterConfig,
   ESP32SensorResponse 
 } from './esp32Service';
 import { logTelemetryToSupabase, isSupabaseConfigured } from './supabaseClient';
@@ -24,6 +26,8 @@ export interface SensorData {
 }
 
 export interface PhysicalHardwareTelemetry {
+  sensorUrl: string;
+  motorUrl: string;
   esp32_01_connected: boolean;
   distance: number | null;
   distanceStatus: 'NORMAL' | 'WARNING' | 'DANGER' | 'NO_ECHO';
@@ -126,6 +130,8 @@ const initialTelemetry: TelemetryState = {
   },
   hardwareMode: 'LIVE_HARDWARE', // Default to live physical hardware!
   physicalHardware: {
+    sensorUrl: '',
+    motorUrl: '',
     esp32_01_connected: false,
     distance: null,
     distanceStatus: 'NORMAL',
@@ -292,6 +298,39 @@ export function useTelemetry() {
   const deadmanTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef<boolean>(false);
   const lastSupabaseSyncRef = useRef<number>(0);
+  const hardwareConfigRef = useRef<HardwareClusterConfig>(getHardwareConfig());
+
+  // Keep hardware configuration synchronized with localStorage and cross-component updates
+  useEffect(() => {
+    const current = getHardwareConfig();
+    hardwareConfigRef.current = current;
+    setTelemetry((prev) => ({
+      ...prev,
+      physicalHardware: {
+        ...prev.physicalHardware,
+        sensorUrl: current.sensorUrl,
+        motorUrl: current.motorUrl,
+      },
+    }));
+
+    const handleConfigChange = (e: Event) => {
+      const customEvent = e as CustomEvent<HardwareClusterConfig>;
+      if (customEvent.detail) {
+        hardwareConfigRef.current = customEvent.detail;
+        setTelemetry((prev) => ({
+          ...prev,
+          physicalHardware: {
+            ...prev.physicalHardware,
+            sensorUrl: customEvent.detail.sensorUrl,
+            motorUrl: customEvent.detail.motorUrl,
+          },
+        }));
+      }
+    };
+
+    window.addEventListener('trayate_hardware_config_updated', handleConfigChange);
+    return () => window.removeEventListener('trayate_hardware_config_updated', handleConfigChange);
+  }, []);
 
   // 1. Mission Clock (ticks every 1s)
   useEffect(() => {
@@ -314,7 +353,7 @@ export function useTelemetry() {
       isPollingRef.current = true;
 
       try {
-        const liveData: ESP32SensorResponse = await fetchLiveSensorData();
+        const liveData: ESP32SensorResponse = await fetchLiveSensorData(hardwareConfigRef.current.sensorUrl);
 
         setTelemetry((prev) => {
           const timestamp = liveData.timestamp || new Date().toLocaleTimeString();
@@ -497,14 +536,14 @@ export function useTelemetry() {
 
     // 2. Dispatch to physical ESP32-02 (Rover Motor Controller)
     // Note: Never sends motor commands to ESP32-01
-    await sendMotorMovement(direction, telemetry.rover.speedGovernorPercent);
+    await sendMotorMovement(direction, telemetry.rover.speedGovernorPercent, hardwareConfigRef.current.motorUrl);
   }, [resetDeadmanWatchdog, telemetry.rover.speedGovernorPercent]);
 
   // Physical Servo Scanner angle control
   const setPhysicalServoAngle = useCallback(async (angle: number): Promise<boolean> => {
     soundManager.playClickTone();
     try {
-      const res = await sendServoAngleCommand(angle);
+      const res = await sendServoAngleCommand(angle, hardwareConfigRef.current.sensorUrl);
       if (res.success) {
         setTelemetry((prev) => ({
           ...prev,
@@ -523,7 +562,7 @@ export function useTelemetry() {
 
   const triggerEStop = useCallback(() => {
     soundManager.playCriticalAlarm();
-    triggerHardwareEmergencyStop();
+    triggerHardwareEmergencyStop(hardwareConfigRef.current.motorUrl);
     setTelemetry((prev) => ({
       ...prev,
       rover: {
@@ -645,6 +684,26 @@ export function useTelemetry() {
     });
   }, []);
 
+  // Update ESP32 hardware IP addresses dynamically without hardcoding
+  const updateHardwareIps = useCallback((sensorIp: string, motorIp: string, edgeIp?: string) => {
+    const updated = saveHardwareConfig({
+      sensorUrl: sensorIp,
+      motorUrl: motorIp,
+      edgeUrl: edgeIp || '',
+    });
+    hardwareConfigRef.current = updated;
+    setTelemetry((prev) => ({
+      ...prev,
+      physicalHardware: {
+        ...prev.physicalHardware,
+        sensorUrl: updated.sensorUrl,
+        motorUrl: updated.motorUrl,
+        consecutiveFailures: 0,
+        pollError: null,
+      },
+    }));
+  }, []);
+
   return {
     telemetry,
     sendMovementCommand,
@@ -659,5 +718,6 @@ export function useTelemetry() {
     setHumanDetection,
     toggleHumanDetection,
     toggleSoundMute,
+    updateHardwareIps,
   };
 }

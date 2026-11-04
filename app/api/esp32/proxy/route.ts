@@ -7,8 +7,13 @@ export const dynamic = 'force-dynamic';
 // Solves browser Private Network Access (PNA), mixed-content, and CORS constraints
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
-  const targetBase = searchParams.get('base') || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71';
+  let targetBase = searchParams.get('base') || process.env.NEXT_PUBLIC_ROVER_SENSOR_URL || 'http://192.168.137.71';
   const endpoint = searchParams.get('endpoint') || '/api/status';
+
+  targetBase = targetBase.trim();
+  if (!targetBase.startsWith('http://') && !targetBase.startsWith('https://')) {
+    targetBase = `http://${targetBase}`;
+  }
 
   // Build target URL preserving all query parameters (e.g., angle, direction)
   const cleanBase = targetBase.replace(/\/+$/, '');

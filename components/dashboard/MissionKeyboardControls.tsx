@@ -36,8 +36,7 @@ export default function MissionKeyboardControls() {
   // Continuous movement heartbeat timer
   const continuousIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const hardwareConfig = getHardwareConfig();
-  const isMotorConfigured = Boolean(hardwareConfig.motorUrl);
+  const isMotorConfigured = Boolean(telemetry.physicalHardware.motorUrl);
   const isEStopped = telemetry.rover.eStopTriggered;
 
   // Set of currently held movement keys for butter-smooth multi-key locomotion
@@ -293,8 +292,8 @@ export default function MissionKeyboardControls() {
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 text-brand-secondaryText">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-success"></span>
-              <span>ESP32-02 (Motors)</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${isMotorConfigured ? 'bg-brand-success' : 'bg-brand-warning'}`}></span>
+              <span>ESP32-02 ({telemetry.physicalHardware.motorUrl ? telemetry.physicalHardware.motorUrl.replace(/^https?:\/\//, '') : 'Unset'})</span>
             </div>
           </div>
         )}

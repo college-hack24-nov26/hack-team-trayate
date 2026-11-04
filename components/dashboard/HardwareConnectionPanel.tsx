@@ -47,7 +47,8 @@ export default function HardwareConnectionPanel() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    saveHardwareConfig(config);
+    const normalized = saveHardwareConfig(config);
+    setConfig(normalized);
     setSaveSuccess(true);
     refreshHealth();
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -88,16 +89,26 @@ export default function HardwareConnectionPanel() {
               <span className="font-mono text-[10px] text-brand-accent font-bold">ESP32-01</span>
               <h4 className="font-sans font-bold text-sm text-brand-primaryText">Sensor Module</h4>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-brand-success/15 border border-brand-success/40 text-brand-success flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-success animate-pulse"></span>
-              <span>ONLINE</span>
-            </span>
+            {(() => {
+              const sensorDev = devices.find((d) => d.id === 'ESP32-01');
+              const isOnline = sensorDev?.status === 'ONLINE';
+              return (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border flex items-center gap-1 ${
+                  isOnline
+                    ? 'bg-brand-success/15 border-brand-success/40 text-brand-success'
+                    : 'bg-brand-warning/15 border-brand-warning/40 text-brand-warning'
+                }`}>
+                  {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-brand-success animate-pulse"></span>}
+                  <span>{isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                </span>
+              );
+            })()}
           </div>
 
           <div className="space-y-1.5 font-mono text-xs text-brand-secondaryText">
             <div className="flex justify-between">
               <span>Target IP:</span>
-              <strong className="text-brand-primaryText">{config.sensorUrl || '192.168.137.71'}</strong>
+              <strong className="text-brand-primaryText truncate max-w-[160px]">{config.sensorUrl ? config.sensorUrl.replace(/^https?:\/\//, '') : 'Unset'}</strong>
             </div>
             <div className="flex justify-between">
               <span>Endpoints:</span>
@@ -109,9 +120,18 @@ export default function HardwareConnectionPanel() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-brand-border text-[10px] font-mono text-brand-success flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Operational on hotspot</span>
+          <div className="pt-2 border-t border-brand-border text-[10px] font-mono flex items-center gap-1">
+            {devices.find((d) => d.id === 'ESP32-01')?.status === 'ONLINE' ? (
+              <span className="text-brand-success flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Online & telemetry streaming</span>
+              </span>
+            ) : (
+              <span className="text-brand-warning flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Check IP or ensure ESP is powered</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -143,8 +163,8 @@ export default function HardwareConnectionPanel() {
           <div className="space-y-1.5 font-mono text-xs text-brand-secondaryText">
             <div className="flex justify-between">
               <span>Target IP:</span>
-              <strong className={config.motorUrl ? 'text-brand-primaryText' : 'text-brand-warning'}>
-                {config.motorUrl || 'http://192.168.137.221'}
+              <strong className={config.motorUrl ? 'text-brand-primaryText truncate max-w-[160px]' : 'text-brand-warning'}>
+                {config.motorUrl ? config.motorUrl.replace(/^https?:\/\//, '') : 'Unset'}
               </strong>
             </div>
             <div className="flex justify-between">
@@ -163,12 +183,12 @@ export default function HardwareConnectionPanel() {
             {devices.find((d) => d.id === 'ESP32-02')?.status === 'ONLINE' ? (
               <span className="text-brand-success flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Operational on hotspot</span>
+                <span>Online & locomotion enabled</span>
               </span>
             ) : (
               <span className="text-brand-warning flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Configured on http://192.168.137.221</span>
+                <span>Configure IP to enable motors</span>
               </span>
             )}
           </div>

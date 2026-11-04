@@ -18,6 +18,7 @@ import {
 export default function PhysicalSensorGrid() {
   const { telemetry } = useTelemetry();
   const { 
+    sensorUrl,
     esp32_01_connected, 
     mq4_raw, 
     mq135_raw, 
@@ -54,7 +55,7 @@ export default function PhysicalSensorGrid() {
                   ? 'bg-brand-success/15 border-brand-success/40 text-brand-success'
                   : 'bg-brand-danger/15 border-brand-danger/40 text-brand-danger'
               }`}>
-                {esp32_01_connected ? 'ONLINE (192.168.137.71)' : 'OFFLINE'}
+                {esp32_01_connected ? `ONLINE (${sensorUrl ? sensorUrl.replace(/^https?:\/\//, '') : 'Configured'})` : 'OFFLINE'}
               </span>
             </div>
             <p className="text-[11px] text-brand-secondaryText">

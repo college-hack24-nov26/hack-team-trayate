@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { 
   Radio, 
@@ -12,9 +13,11 @@ import {
   Clock, 
   Cpu, 
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Sliders
 } from 'lucide-react';
 import Link from 'next/link';
+import HardwareConnectModal from '@/components/dashboard/HardwareConnectModal';
 
 interface HeaderProps {
   title?: string;
@@ -32,6 +35,8 @@ export default function DashboardHeader({
     setHardwareMode, 
     toggleSoundMute 
   } = useTelemetry();
+
+  const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
 
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -63,6 +68,19 @@ export default function DashboardHeader({
             >
               <span className={`w-1.5 h-1.5 rounded-full ${telemetry.hardwareMode === 'SIMULATOR' ? 'bg-brand-warning' : 'bg-brand-success animate-pulse'}`}></span>
               <span>{telemetry.hardwareMode === 'SIMULATOR' ? 'Simulator Mode' : 'Live Hardware'}</span>
+            </button>
+
+            {/* Hardware IP Connect / Reconfigure Button */}
+            <button
+              onClick={() => setIsHardwareModalOpen(true)}
+              title="Enter or update ESP32 IP addresses for Rover & Sensors"
+              className="text-xs font-sans px-2.5 py-1 rounded-lg bg-brand-bg hover:bg-brand-card border border-brand-border text-brand-primaryText transition-colors flex items-center gap-1.5 font-medium"
+            >
+              <Cpu className="w-3.5 h-3.5 text-brand-accent" />
+              <span className="hidden sm:inline">ESP32 IPs:</span>
+              <span className={telemetry.physicalHardware.esp32_01_connected ? 'text-brand-success font-semibold' : 'text-brand-warning font-semibold'}>
+                {telemetry.physicalHardware.esp32_01_connected ? 'Online' : 'Configure'}
+              </span>
             </button>
           </div>
           <p className="text-xs text-brand-secondaryText hidden sm:block">{subtitle}</p>
@@ -158,6 +176,12 @@ export default function DashboardHeader({
         )}
 
       </div>
+
+      {/* Physical ESP32 Hardware IP Configuration Modal */}
+      <HardwareConnectModal 
+        isOpen={isHardwareModalOpen} 
+        onClose={() => setIsHardwareModalOpen(false)} 
+      />
     </header>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTelemetry } from '@/lib/telemetryStore';
 import { 
   AreaChart, 
@@ -12,11 +13,13 @@ import {
   ResponsiveContainer, 
   CartesianGrid 
 } from 'recharts';
-import { Activity, Ruler, Flame, Thermometer, Droplets, WifiOff } from 'lucide-react';
+import { Activity, Ruler, Flame, Thermometer, Droplets, WifiOff, Sliders, Cpu } from 'lucide-react';
+import HardwareConnectModal from '@/components/dashboard/HardwareConnectModal';
 
 export default function LiveHardwareCharts() {
   const { telemetry } = useTelemetry();
-  const { history, esp32_01_connected } = telemetry.physicalHardware;
+  const { history, esp32_01_connected, sensorUrl } = telemetry.physicalHardware;
+  const [isHwModalOpen, setIsHwModalOpen] = useState(false);
 
   // Format history for Recharts
   const chartData = history.map((item) => ({
@@ -50,17 +53,27 @@ export default function LiveHardwareCharts() {
       </div>
 
       {!hasData ? (
-        <div className="bg-brand-card border border-brand-border rounded-xl p-12 text-center space-y-3">
+        <div className="bg-brand-card border border-brand-border rounded-xl p-10 text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-brand-secondary border border-brand-border flex items-center justify-center mx-auto text-brand-secondaryText">
             <WifiOff className="w-6 h-6 text-brand-secondaryText" />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <h4 className="font-sans font-bold text-sm text-brand-primaryText">
               Awaiting Physical ESP32 Hardware Data
             </h4>
-            <p className="font-mono text-xs text-brand-secondaryText max-w-md mx-auto">
-              No simulated numbers are generated. Connect your laptop to the ESP32 hotspot at <code className="text-brand-accent">192.168.137.71</code> to start charting live readings.
+            <p className="text-xs text-brand-secondaryText max-w-md mx-auto">
+              No simulated data is plotted. Currently listening on target <code className="text-brand-accent font-mono">{sensorUrl || 'No IP configured'}</code>.
             </p>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={() => setIsHwModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-accent hover:bg-brand-accent-hover text-brand-bg text-xs font-semibold shadow-sm transition-all"
+            >
+              <Cpu className="w-4 h-4" />
+              <span>Configure Sensor ESP32 IP</span>
+            </button>
           </div>
         </div>
       ) : (
@@ -203,6 +216,12 @@ export default function LiveHardwareCharts() {
 
         </div>
       )}
+
+      {/* Hardware IP Configuration Modal */}
+      <HardwareConnectModal 
+        isOpen={isHwModalOpen} 
+        onClose={() => setIsHwModalOpen(false)} 
+      />
 
     </div>
   );

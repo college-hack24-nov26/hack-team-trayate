@@ -16,16 +16,22 @@ import {
   ArrowUpRight, 
   Activity, 
   Cpu,
-  RotateCcw
+  RotateCcw,
+  Sliders,
+  Settings
 } from 'lucide-react';
 import { sendServoAngleCommand } from '@/lib/esp32Service';
+import HardwareConnectModal from '@/components/dashboard/HardwareConnectModal';
 
 export default function MissionControlPage() {
   const { telemetry, setPhysicalServoAngle } = useTelemetry();
   const [activeTab, setActiveTab] = useState<'proximity' | 'atmosphere'>('proximity');
   const [isServoPending, setIsServoPending] = useState(false);
+  const [isHwModalOpen, setIsHwModalOpen] = useState(false);
 
   const { 
+    sensorUrl,
+    motorUrl,
     esp32_01_connected, 
     distance, 
     distanceStatus, 
@@ -77,15 +83,19 @@ export default function MissionControlPage() {
           </span>
         </div>
 
-        {/* Link to Dedicated 2D Mine Map */}
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 text-xs text-brand-secondaryText">
+        {/* Hardware IP Quick Connect & Map Links */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => setIsHwModalOpen(true)}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-brand-secondary hover:bg-brand-elevated border border-brand-border text-xs text-brand-primaryText transition-colors"
+            title="Configure ESP32 IP addresses"
+          >
             <Cpu className="w-3.5 h-3.5 text-brand-accent" />
-            <span>ESP32-01:</span>
+            <span className="hidden sm:inline">ESP32s:</span>
             <span className={esp32_01_connected ? 'text-brand-success font-medium' : 'text-brand-warning font-medium'}>
-              {esp32_01_connected ? `Online (${latencyMs}ms)` : 'Offline'}
+              {esp32_01_connected ? `Sensor Online (${latencyMs}ms)` : 'Config IPs'}
             </span>
-          </div>
+          </button>
 
           <Link
             href="/dashboard/map"
@@ -296,13 +306,26 @@ export default function MissionControlPage() {
               </div>
             )}
 
-            {/* Hardware Status Strip */}
-            <div className="pt-2 border-t border-brand-border flex items-center justify-between text-xs text-brand-secondaryText">
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${esp32_01_connected ? 'bg-brand-success' : 'bg-brand-warning'}`}></span>
-                <span>ESP32-01: <code className="font-mono text-brand-primaryText">192.168.137.71</code></span>
-              </span>
-              <span>ESP32-02: <code className="font-mono text-brand-primaryText">192.168.137.221</code></span>
+            {/* Hardware Status Strip with Dynamic IPs */}
+            <div className="pt-2 border-t border-brand-border flex flex-wrap items-center justify-between text-xs text-brand-secondaryText gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${esp32_01_connected ? 'bg-brand-success' : 'bg-brand-warning'}`}></span>
+                  <span>Sensor (ESP32-01): <code className="font-mono text-brand-primaryText">{sensorUrl ? sensorUrl.replace(/^https?:\/\//, '') : 'Unset'}</code></span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${motorUrl ? 'bg-brand-accent' : 'bg-brand-secondaryText'}`}></span>
+                  <span>Rover (ESP32-02): <code className="font-mono text-brand-primaryText">{motorUrl ? motorUrl.replace(/^https?:\/\//, '') : 'Unset'}</code></span>
+                </span>
+              </div>
+
+              <button
+                onClick={() => setIsHwModalOpen(true)}
+                className="text-brand-accent hover:underline flex items-center gap-1 font-medium text-xs"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Change ESP32 IPs</span>
+              </button>
             </div>
 
           </div>
@@ -310,6 +333,12 @@ export default function MissionControlPage() {
         </div>
 
       </div>
+
+      {/* Hardware IP Configuration Modal */}
+      <HardwareConnectModal 
+        isOpen={isHwModalOpen} 
+        onClose={() => setIsHwModalOpen(false)} 
+      />
 
     </div>
   );
